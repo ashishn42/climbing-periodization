@@ -4,5 +4,10 @@ dist/
 *.log
 .env
 .env.local
+.env.*.local
 .vscode/
 .idea/
+*.local
+.vercel
+coverage/
+.nyc_output/
