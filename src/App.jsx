@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Activity, TrendingUp, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft, Plus, Minus, Save, RotateCcw, Plane, X, ChevronDown, Trash2, Info } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Calendar, Activity, TrendingUp, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft, Plus, Minus, Save, RotateCcw, Plane, X, ChevronDown, Trash2, Info, Timer, Hash } from 'lucide-react';
+import { calcLoggedLoad, calcACWR, getCurrentWeek, runMigrations, generatePreseededSessions } from './logic.js';
+import { SC_WORKOUTS } from './sc-workouts.js';
 
 // ============================================================
 // WARMUP & COOLDOWN PROTOCOLS
@@ -127,8 +129,7 @@ const BLOCK_INTENSITY = {
   'Climbing|capacity|Sun': 'climbing_easy',
   'Fingers (repeaters)|capacity|Tue': 'fingers_moderate',
   'Fingers (no-hangs light)|capacity|Sun': 'fingers_low',
-  'Pull|capacity|Sat': 'pull_moderate',
-  'Pull|capacity|Wed': 'pull_moderate',
+  'Push + Pull|capacity|Sun': 'pull_moderate',
   // strength
   'Climbing (limit)|strength|Tue': 'climbing_hard',
   'Climbing (board limit)|strength|Thu': 'climbing_hard',
@@ -136,8 +137,7 @@ const BLOCK_INTENSITY = {
   'Easy climb|strength|Sun': 'climbing_easy',
   'Fingers (max hangs)|strength|Tue': 'fingers_high',
   'Fingers (max hangs)|strength|Sun': 'fingers_high',
-  'Pull|strength|Sat': 'pull_heavy',
-  'Pull|strength|Wed': 'pull_heavy',
+  'Push + Pull|strength|Sun': 'pull_heavy',
   // power
   'Campus|power|Tue': 'climbing_max',
   'Power boulders|power|Tue': 'climbing_hard',
@@ -146,8 +146,7 @@ const BLOCK_INTENSITY = {
   'Board climbing|power|Sat': 'climbing_hard',
   'Fingers (min-edge)|power|Tue': 'fingers_high',
   'Fingers (contact strength)|power|Sat': 'fingers_high',
-  'Pull|power|Sat': 'pull_heavy',
-  'Pull|power|Wed': 'pull_heavy',
+  'Push + Pull|power|Sun': 'pull_heavy',
   // power endurance
   'Climbing (4×4s)|powerEndurance|Tue': 'climbing_moderate',
   'Board circuit|powerEndurance|Thu': 'climbing_moderate',
@@ -155,18 +154,15 @@ const BLOCK_INTENSITY = {
   'Easy climb OR rest|powerEndurance|Sun': 'climbing_easy',
   'Fingers (repeaters)|powerEndurance|Tue': 'fingers_moderate',
   'Fingers (no-hang density)|powerEndurance|Sun': 'fingers_moderate',
-  'Pull|powerEndurance|Sat': 'pull_moderate',
-  'Pull|powerEndurance|Wed': 'pull_moderate',
+  'Push + Pull|powerEndurance|Sun': 'pull_moderate',
   // peak
   'Project session|peak|Tue': 'climbing_hard',
   'Easy movement|peak|Thu': 'climbing_easy',
   'Project session|peak|Sat': 'climbing_hard',
-  'Pull (light)|peak|Sat': 'pull_light',
-  'Pull (light)|peak|Wed': 'pull_light',
+  'Push + Pull (light)|peak|Sun': 'pull_light',
   // travel
   'Climbing|travel|Tue': 'climbing_easy',
   'Climbing|travel|Sat': 'climbing_easy',
-  'Pull|travel|Sat': 'pull_light',
   'Pull|travel|Wed': 'pull_light',
 };
 
@@ -226,22 +222,13 @@ const PHASES = {
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
       },
-      Wed: {
-        total: '~50m',
-        blocks: [
-          { name: 'Warm-up', detail: '', time: 8, type: 'warmup', protocol: 'warmup_short' },
-          { name: 'Pull', detail: 'See training folder', time: 15, type: 'sc' },
-          { name: 'Push + lateral raises', detail: 'See training folder', time: 10, type: 'sc' },
-          { name: 'Legs', detail: 'See training folder', time: 12, type: 'sc' },
-          { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
-        ],
-      },
       Thu: {
-        total: '~1h 45m',
+        total: '~2h',
         blocks: [
           { name: 'Warm-up', detail: '', time: 15, type: 'warmup', protocol: 'warmup_standard' },
           { name: 'Skill drill', detail: 'One pattern, focused practice', time: 15, type: 'skill' },
           { name: 'Climbing', detail: '30–40 boulders V2–V5', time: 60, type: 'climbing' },
+          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
           { name: 'Neck', detail: 'See training folder', time: 3, type: 'sc' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
@@ -257,11 +244,12 @@ const PHASES = {
         ],
       },
       Sun: {
-        total: '~1h 30m',
+        total: '~2h',
         blocks: [
           { name: 'Warm-up', detail: '', time: 10, type: 'warmup', protocol: 'warmup_short' },
           { name: 'Climbing', detail: '20–30 easy boulders V2–V4, movement quality', time: 50, type: 'climbing' },
-          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
+          { name: 'Push + Pull', detail: 'See training folder', time: 25, type: 'sc' },
+          { name: 'Legs', detail: 'See training folder', time: 12, type: 'sc' },
           { name: 'Fingers (no-hangs light)', detail: '5 × 10s @ 60%, 2 min rest', time: 12, type: 'fingers' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
@@ -285,21 +273,12 @@ const PHASES = {
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
       },
-      Wed: {
-        total: '~55m',
-        blocks: [
-          { name: 'Warm-up', detail: '', time: 10, type: 'warmup', protocol: 'warmup_short' },
-          { name: 'Pull', detail: 'See training folder', time: 18, type: 'sc' },
-          { name: 'Push + lateral raises', detail: 'See training folder', time: 10, type: 'sc' },
-          { name: 'Legs', detail: 'See training folder', time: 12, type: 'sc' },
-          { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
-        ],
-      },
       Thu: {
-        total: '~1h 30m',
+        total: '~1h 45m',
         blocks: [
           { name: 'Warm-up', detail: '', time: 20, type: 'warmup', protocol: 'warmup_standard' },
           { name: 'Climbing (board limit)', detail: '5–7 problems Kilter/MoonBoard, 3–5 tries', time: 60, type: 'climbing' },
+          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
           { name: 'Neck', detail: 'See training folder', time: 3, type: 'sc' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
@@ -315,12 +294,13 @@ const PHASES = {
         ],
       },
       Sun: {
-        total: '~1h 30m',
+        total: '~1h 45m',
         blocks: [
           { name: 'Warm-up', detail: '', time: 15, type: 'warmup', protocol: 'warmup_standard' },
           { name: 'Easy climb', detail: '20 boulders V3–V5 (or skip if cooked)', time: 35, type: 'climbing' },
+          { name: 'Push + Pull', detail: 'See training folder', time: 28, type: 'sc' },
+          { name: 'Legs', detail: 'See training folder', time: 12, type: 'sc' },
           { name: 'Fingers (max hangs)', detail: '6 × 7s on 14–15mm @ BW or +5kg', time: 22, type: 'fingers' },
-          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
       },
@@ -344,22 +324,13 @@ const PHASES = {
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
       },
-      Wed: {
-        total: '~1h',
-        blocks: [
-          { name: 'Warm-up', detail: '', time: 10, type: 'warmup', protocol: 'warmup_short' },
-          { name: 'Pull', detail: 'See training folder', time: 17, type: 'sc' },
-          { name: 'Push + plyo', detail: 'See training folder', time: 15, type: 'sc' },
-          { name: 'Legs (with jumps)', detail: 'See training folder', time: 12, type: 'sc' },
-          { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
-        ],
-      },
       Thu: {
-        total: '~1h 30m',
+        total: '~1h 45m',
         blocks: [
           { name: 'Warm-up', detail: '', time: 25, type: 'warmup', protocol: 'warmup_power' },
           { name: 'Dynos', detail: '6–8 max-distance dynos, 3 min rest', time: 25, type: 'climbing' },
           { name: 'Board (single hard moves)', detail: '4–5 problems', time: 25, type: 'climbing' },
+          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
           { name: 'Neck', detail: 'See training folder', time: 3, type: 'sc' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
@@ -376,9 +347,11 @@ const PHASES = {
         ],
       },
       Sun: {
-        total: '~45m',
+        total: '~1h 25m',
         blocks: [
-          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
+          { name: 'Warm-up', detail: '', time: 10, type: 'warmup', protocol: 'warmup_short' },
+          { name: 'Push + Pull', detail: 'See training folder', time: 32, type: 'sc' },
+          { name: 'Legs (with jumps)', detail: 'See training folder', time: 12, type: 'sc' },
           { name: 'Mobility / active recovery', detail: '', time: 25, type: 'cooldown', protocol: 'mobility_recovery' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
@@ -403,21 +376,12 @@ const PHASES = {
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
       },
-      Wed: {
-        total: '~50m',
-        blocks: [
-          { name: 'Warm-up', detail: '', time: 8, type: 'warmup', protocol: 'warmup_short' },
-          { name: 'Pull', detail: 'See training folder', time: 15, type: 'sc' },
-          { name: 'Push + lateral raises', detail: 'See training folder', time: 10, type: 'sc' },
-          { name: 'Legs', detail: 'See training folder', time: 12, type: 'sc' },
-          { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
-        ],
-      },
       Thu: {
-        total: '~1h 30m',
+        total: '~1h 45m',
         blocks: [
           { name: 'Warm-up', detail: '', time: 15, type: 'warmup', protocol: 'warmup_standard' },
           { name: 'Board circuit', detail: '6 board problems V6–V8, 90s rest between, repeat circuit 2×', time: 65, type: 'climbing' },
+          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
           { name: 'Neck', detail: 'See training folder', time: 3, type: 'sc' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
@@ -433,12 +397,13 @@ const PHASES = {
         ],
       },
       Sun: {
-        total: '~1h 30m',
+        total: '~1h 45m',
         blocks: [
           { name: 'Warm-up', detail: '', time: 10, type: 'warmup', protocol: 'warmup_short' },
           { name: 'Easy climb OR rest', detail: '4×4s at easier grade if recovered', time: 35, type: 'climbing' },
+          { name: 'Push + Pull', detail: 'See training folder', time: 25, type: 'sc' },
+          { name: 'Legs', detail: 'See training folder', time: 12, type: 'sc' },
           { name: 'Fingers (no-hang density)', detail: '8 × 10s @ 70%, 90s rest', time: 12, type: 'fingers' },
-          { name: 'Shoulder', detail: 'See training folder', time: 15, type: 'sc' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
       },
@@ -460,21 +425,12 @@ const PHASES = {
           { name: 'Cool-down', detail: '', time: 10, type: 'cooldown', protocol: 'cooldown_peak' },
         ],
       },
-      Wed: {
-        total: '~40m',
-        blocks: [
-          { name: 'Warm-up', detail: '', time: 8, type: 'warmup', protocol: 'warmup_short' },
-          { name: 'Pull (light)', detail: 'Maintenance only', time: 8, type: 'sc' },
-          { name: 'Push + lateral raises (light)', detail: 'Maintenance only', time: 8, type: 'sc' },
-          { name: 'Legs (light)', detail: 'See training folder', time: 8, type: 'sc' },
-          { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
-        ],
-      },
       Thu: {
-        total: '~1h 5m',
+        total: '~1h 15m',
         blocks: [
           { name: 'Warm-up', detail: '', time: 10, type: 'warmup', protocol: 'warmup_short' },
           { name: 'Easy movement', detail: '15–20 boulders V2–V4, no projecting', time: 40, type: 'climbing' },
+          { name: 'Shoulder (light)', detail: 'Band work only', time: 10, type: 'sc' },
           { name: 'Neck', detail: 'See training folder', time: 3, type: 'sc' },
           { name: 'Wrist', detail: 'See training folder', time: 5, type: 'sc' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
@@ -490,9 +446,10 @@ const PHASES = {
         ],
       },
       Sun: {
-        total: '~30m',
+        total: '~45m',
         blocks: [
-          { name: 'Shoulder (light)', detail: 'Band work only', time: 10, type: 'sc' },
+          { name: 'Push + Pull (light)', detail: 'Maintenance only', time: 16, type: 'sc' },
+          { name: 'Legs (light)', detail: 'See training folder', time: 8, type: 'sc' },
           { name: 'Mobility', detail: '', time: 15, type: 'cooldown', protocol: 'mobility_short' },
           { name: 'Cool-down', detail: '', time: 5, type: 'cooldown', protocol: 'cooldown_standard' },
         ],
@@ -573,29 +530,15 @@ const DAYS_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const todayKey = () => new Date().toISOString().split('T')[0];
 const dayOfWeek = (date) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
 
-// Calculate which week of the active phase we're in based on phase start date.
-function getCurrentWeek(phaseStartDate, phaseTotalWeeks) {
-  if (!phaseStartDate) return 1;
-  const start = new Date(phaseStartDate);
-  const now = new Date();
-  const days = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-  const week = Math.floor(days / 7) + 1;
-  return Math.max(1, Math.min(week, phaseTotalWeeks));
-}
-
-// Look up intensity bucket for a block in a phase/day context.
 function getBlockIntensity(block, phaseKey, day) {
   const key = `${block.name}|${phaseKey}|${day}`;
   if (BLOCK_INTENSITY[key]) return BLOCK_INTENSITY[key];
-  // Fallback by block type / name
   if (block.type === 'climbing') return 'climbing_moderate';
   if (block.type === 'fingers') return 'fingers_moderate';
-  // Pull is the one S&C item that overlaps with climbing — detect by name
   if (block.type === 'sc' && /pull/i.test(block.name)) return 'pull_moderate';
   return block.type;
 }
 
-// Calculate planned load for a session.
 function calcPlannedLoad(session, phaseKey, day, weekProg) {
   if (!session) return 0;
   let load = 0;
@@ -604,72 +547,30 @@ function calcPlannedLoad(session, phaseKey, day, weekProg) {
     const weight = LOAD_WEIGHTS[intensityBucket] ?? LOAD_WEIGHTS[b.type] ?? 0.5;
     load += b.time * weight;
   });
-  // Apply weekly volume + intensity multipliers
   return Math.round(load * (weekProg?.volumeMult ?? 1) * (weekProg?.intensityMult ?? 1));
 }
 
-// Calculate actual load from a logged session.
-// Uses block-level minutes + the same weights, modulated by session RPE.
-function calcLoggedLoad(logged) {
-  if (!logged) return 0;
-  if (logged.computedLoad !== undefined) return logged.computedLoad;
-  // Compute from blocks if present (current format)
-  if (Array.isArray(logged.blocks) && logged.blocks.length > 0) {
-    let total = 0;
-    logged.blocks.forEach(b => {
-      const w = LOAD_WEIGHTS[b.intensity] ?? LOAD_WEIGHTS[b.type] ?? 0.5;
-      total += (b.actualMin || 0) * w;
-    });
-    const rpeMod = (logged.rpe || 7) / 7;
-    return Math.round(total * rpeMod);
-  }
-  // Fallback for legacy data (only minutes, no block breakdown):
-  const legacy = (logged.climbingMinutes || 0) * 1.0 +
-                 (logged.fingerLoadMinutes || 0) * 1.2;
-  const rpeMod = (logged.rpe || 7) / 7;
-  return Math.round(legacy * rpeMod);
-}
-
-// ============================================================
-// SAFE STORAGE — PWA version, uses localStorage exclusively.
-// Data lives in the browser's localStorage, scoped to the
-// domain you deploy this to. Independent of Claude.
-//
-// Each key is stored with a `send_` prefix to avoid colliding
-// with any other apps on the same domain.
-//
-// API is async (Promise-returning) to keep the rest of the
-// codebase unchanged from the artifact version.
-// ============================================================
-
-const safeStorage = {
-  async set(key, value) {
-    try {
-      localStorage.setItem(`send_${key}`, value);
-      return ['fulfilled'];
-    } catch (e) {
-      console.error('localStorage set failed', e);
-      return ['rejected'];
+// One-time migration: move data from the old `send_` prefixed keys to plain keys.
+(function migrateSendPrefix() {
+  const keys = ['currentPhase','travelMode','phaseStartDate','sessions','fingerLog','lastExportTs',
+    'backup_0','backup_1','backup_2','backup_3','backup_4'];
+  keys.forEach(k => {
+    const old = localStorage.getItem(`send_${k}`);
+    if (old !== null && localStorage.getItem(k) === null) {
+      localStorage.setItem(k, old);
+      localStorage.removeItem(`send_${k}`);
     }
-  },
+  });
+})();
 
-  async get(key) {
-    try {
-      const v = localStorage.getItem(`send_${key}`);
-      if (v !== null && v !== undefined) return { value: v, source: 'localStorage' };
-    } catch (e) {}
-    return null;
-  },
-
-  async delete(key) {
-    try {
-      localStorage.removeItem(`send_${key}`);
-      return ['fulfilled'];
-    } catch (e) {
-      return ['rejected'];
-    }
-  },
+const storage = {
+  set(key, value) { localStorage.setItem(key, value); },
+  get(key) { return localStorage.getItem(key); },
+  delete(key) { localStorage.removeItem(key); },
 };
+
+// Run schema migrations and stamp version
+runMigrations(storage);
 
 // ============================================================
 // MAIN APP
@@ -704,96 +605,89 @@ export default function ClimbingApp() {
   const [showRestorePrompt, setShowRestorePrompt] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const results = await Promise.all([
-          safeStorage.get('currentPhase'),
-          safeStorage.get('travelMode'),
-          safeStorage.get('phaseStartDate'),
-          safeStorage.get('sessions'),
-          safeStorage.get('fingerLog'),
-          safeStorage.get('lastExportTs'),
-        ]);
-        if (results[0]?.value) setCurrentPhase(results[0].value);
-        if (results[1]?.value) setTravelMode(results[1].value === 'true');
-        if (results[2]?.value) setPhaseStartDate(results[2].value);
-        if (results[3]?.value) setSessions(JSON.parse(results[3].value));
-        if (results[4]?.value) setFingerLog(JSON.parse(results[4].value));
-        if (results[5]?.value) setLastExportTs(results[5].value);
+    try {
+      const phase = storage.get('currentPhase');
+      const travel = storage.get('travelMode');
+      const startDate = storage.get('phaseStartDate');
+      const sess = storage.get('sessions');
+      const fingers = storage.get('fingerLog');
+      const lastExp = storage.get('lastExportTs');
 
-        // Check if there's any history at all — if not, prompt restore.
-        // We check both sessions and fingerLog because user might have logged only one.
-        const hasAnyData = (results[3]?.value && results[3].value !== '{}') ||
-                           (results[4]?.value && results[4].value !== '{}');
-        // Also check for backup snapshots that might hint at lost data
-        const hasBackups = await checkForBackups();
-        // Show restore prompt ONLY if storage is empty AND there are no backups
-        // (if backups exist, the user can find them in Settings)
-        if (!hasAnyData && !hasBackups) {
-          setShowRestorePrompt(true);
-        }
-      } catch (e) { console.log('Load error', e); }
-      setLoading(false);
-    }
-    load();
+      if (phase) setCurrentPhase(phase);
+      if (travel) setTravelMode(travel === 'true');
+      if (startDate) setPhaseStartDate(startDate);
+      if (fingers) setFingerLog(JSON.parse(fingers));
+      if (lastExp) setLastExportTs(lastExp);
+
+      // Load or pre-seed sessions
+      if (sess && sess !== '{}') {
+        setSessions(JSON.parse(sess));
+      } else {
+        // First launch — pre-seed 4 weeks of Capacity baseline for ACWR
+        const seeded = generatePreseededSessions(startDate || null);
+        setSessions(seeded);
+        storage.set('sessions', JSON.stringify(seeded));
+        writeBackupImmediate(seeded, {});
+      }
+
+      const hasAnyData = (sess && sess !== '{}') || (fingers && fingers !== '{}');
+      const hasBackups = checkForBackups();
+      if (!hasAnyData && !hasBackups) setShowRestorePrompt(true);
+    } catch (e) { console.log('Load error', e); }
+    setLoading(false);
   }, []);
 
-  // Detect any backup_N keys to know if we have history to surface
-  const checkForBackups = async () => {
+  const checkForBackups = () => {
     for (let i = 0; i < 5; i++) {
-      const r = await safeStorage.get(`backup_${i}`);
-      if (r?.value) return true;
+      if (storage.get(`backup_${i}`)) return true;
     }
     return false;
   };
 
-  const persistPhase = async (phase) => {
+  const persistPhase = (phase) => {
     setCurrentPhase(phase);
-    await safeStorage.set('currentPhase', phase);
+    storage.set('currentPhase', phase);
   };
-  const persistTravel = async (mode) => {
+  const persistTravel = (mode) => {
     setTravelMode(mode);
-    await safeStorage.set('travelMode', String(mode));
+    storage.set('travelMode', String(mode));
   };
-  const persistStartDate = async (date) => {
+  const persistStartDate = (date) => {
     setPhaseStartDate(date);
-    await safeStorage.set('phaseStartDate', date);
+    storage.set('phaseStartDate', date);
   };
-  const persistLastExport = async (ts) => {
+  const persistLastExport = (ts) => {
     setLastExportTs(ts);
-    await safeStorage.set('lastExportTs', ts);
+    storage.set('lastExportTs', ts);
   };
 
-  // Rolling backups: keeps last 5 snapshots written to safeStorage.
-  const writeBackup = async (sessionsData, fingerData) => {
+  const writeBackupImmediate = (sessionsData, fingerData) => {
     try {
-      // Shift existing backups down by one
       for (let i = 4; i > 0; i--) {
-        const prev = await safeStorage.get(`backup_${i - 1}`);
-        if (prev?.value) {
-          await safeStorage.set(`backup_${i}`, prev.value);
-        }
+        const prev = storage.get(`backup_${i - 1}`);
+        if (prev) storage.set(`backup_${i}`, prev);
       }
-      const snapshot = {
+      storage.set('backup_0', JSON.stringify({
         ts: new Date().toISOString(),
         sessions: sessionsData,
         fingerLog: fingerData,
-      };
-      await safeStorage.set('backup_0', JSON.stringify(snapshot));
-      setBackupVersion(v => v + 1);
-    } catch (e) {
-      console.log('Backup failed', e);
-    }
+      }));
+    } catch (e) { console.log('Backup failed', e); }
   };
 
-  const persistSessions = async (next) => {
+  const writeBackup = (sessionsData, fingerData) => {
+    writeBackupImmediate(sessionsData, fingerData);
+    setBackupVersion(v => v + 1);
+  };
+
+  const persistSessions = (next) => {
     setSessions(next);
-    await safeStorage.set('sessions', JSON.stringify(next));
+    storage.set('sessions', JSON.stringify(next));
     writeBackup(next, fingerLog);
   };
-  const persistFingers = async (next) => {
+  const persistFingers = (next) => {
     setFingerLog(next);
-    await safeStorage.set('fingerLog', JSON.stringify(next));
+    storage.set('fingerLog', JSON.stringify(next));
     writeBackup(sessions, next);
   };
 
@@ -899,14 +793,16 @@ export default function ClimbingApp() {
             onMarkExported={() => persistLastExport(new Date().toISOString())}
           />
         )}
+        {view === 'utils' && <UtilsView />}
       </main>
 
       <nav style={styles.nav}>
-        <NavButton icon={<Calendar size={20} />} label="Today" active={view === 'today'} onClick={() => setView('today')} />
-        <NavButton icon={<Activity size={20} />} label="Week" active={view === 'week'} onClick={() => setView('week')} />
-        <NavButton icon={<CheckCircle2 size={20} />} label="Log" active={view === 'log'} onClick={() => setView('log')} />
-        <NavButton icon={<TrendingUp size={20} />} label="History" active={view === 'acwr'} onClick={() => setView('acwr')} />
-        <NavButton icon={<AlertCircle size={20} />} label="Fingers" active={view === 'fingers'} onClick={() => setView('fingers')} />
+        <NavButton icon={<Calendar size={18} />} label="Today" active={view === 'today'} onClick={() => setView('today')} />
+        <NavButton icon={<Activity size={18} />} label="Week" active={view === 'week'} onClick={() => setView('week')} />
+        <NavButton icon={<CheckCircle2 size={18} />} label="Log" active={view === 'log'} onClick={() => setView('log')} />
+        <NavButton icon={<TrendingUp size={18} />} label="History" active={view === 'acwr'} onClick={() => setView('acwr')} />
+        <NavButton icon={<AlertCircle size={18} />} label="Fingers" active={view === 'fingers'} onClick={() => setView('fingers')} />
+        <NavButton icon={<Timer size={18} />} label="Tools" active={view === 'utils'} onClick={() => setView('utils')} />
       </nav>
 
       <button style={styles.settingsBtn} onClick={() => setView('settings')}>⚙</button>
@@ -1054,31 +950,26 @@ function BlockCard({ block, weekProg }) {
   const [open, setOpen] = useState(false);
   const color = TYPE_COLORS[block.type];
   const hasProtocol = !!block.protocol && !!PROTOCOLS[block.protocol];
-  // Scale time for non-warmup/cooldown blocks if weekly modifier present
+  const scWorkout = SC_WORKOUTS[block.name];
+  const isExpandable = hasProtocol || !!scWorkout;
   const scaledTime = (weekProg && block.type !== 'warmup' && block.type !== 'cooldown')
     ? Math.round(block.time * weekProg.volumeMult)
     : block.time;
-  const scaledNote = scaledTime !== block.time
-    ? ` (was ${block.time}m at base)`
-    : '';
+  const scaledNote = scaledTime !== block.time ? ` (was ${block.time}m at base)` : '';
 
   return (
     <div
-      style={{ ...styles.blockCard, borderLeftColor: color, cursor: hasProtocol ? 'pointer' : 'default' }}
-      onClick={() => hasProtocol && setOpen(!open)}
+      style={{ ...styles.blockCard, borderLeftColor: color, cursor: isExpandable ? 'pointer' : 'default' }}
+      onClick={() => isExpandable && setOpen(!open)}
     >
       <div style={styles.blockHeader}>
         <div style={styles.blockName}>{block.name}</div>
         <div style={styles.blockRight}>
           <div style={styles.blockTime}>{scaledTime}m</div>
-          {hasProtocol && (
+          {isExpandable && (
             <ChevronDown
               size={16}
-              style={{
-                color: '#9ca3af',
-                transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.2s',
-              }}
+              style={{ color: '#9ca3af', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}
             />
           )}
         </div>
@@ -1086,9 +977,25 @@ function BlockCard({ block, weekProg }) {
       {block.detail && <div style={styles.blockDetail}>{block.detail}{scaledNote}</div>}
       <div style={{ ...styles.blockType, color }}>{TYPE_LABELS[block.type]}</div>
 
-      {hasProtocol && open && (
-        <ProtocolExpanded protocol={PROTOCOLS[block.protocol]} />
-      )}
+      {hasProtocol && open && <ProtocolExpanded protocol={PROTOCOLS[block.protocol]} />}
+      {scWorkout && open && <SCWorkoutExpanded workout={scWorkout} />}
+    </div>
+  );
+}
+
+function SCWorkoutExpanded({ workout }) {
+  return (
+    <div style={styles.protocolWrap}>
+      <div style={styles.protocolName}>{workout.title}</div>
+      {workout.note && <div style={styles.protocolNote}>{workout.note}</div>}
+      {workout.sections.map((section, i) => (
+        <div key={i} style={{ marginTop: 10 }}>
+          <div style={styles.scSectionHeading}>{section.heading}</div>
+          {section.items.map((item, j) => (
+            <div key={j} style={styles.scSectionItem}>· {item}</div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -1944,6 +1851,7 @@ function SessionListItem({ date, session, fingerEntry, onEdit }) {
   const blocks = session.blocks || [];
   const hasBlocks = blocks.length > 0;
   const isCustom = session.isCustom;
+  const isPreSeeded = session.isPreSeeded;
   const totalMin = blocks.reduce((s, b) => s + (b.actualMin || 0), 0);
 
   // Determine session "type" badge based on blocks
@@ -1960,18 +1868,19 @@ function SessionListItem({ date, session, fingerEntry, onEdit }) {
 
   return (
     <div
-      style={{ ...styles.sessionItem, cursor: 'pointer' }}
+      style={{ ...styles.sessionItem, cursor: 'pointer', opacity: isPreSeeded ? 0.55 : 1 }}
       onClick={() => setExpanded(!expanded)}
     >
       <div style={styles.sessionItemHeader}>
         <div style={styles.sessionItemLeft}>
-          <div style={styles.sessionItemDay}>{dayName}</div>
+          <div style={{ ...styles.sessionItemDay, color: isPreSeeded ? '#6b7280' : '#10b981' }}>{dayName}</div>
           <div style={styles.sessionItemDate}>{dateLabel}</div>
         </div>
         <div style={styles.sessionItemMiddle}>
           <div style={styles.sessionItemType}>
             {sessionTypeLabel}
             {isCustom && <span style={styles.customBadge}>custom</span>}
+            {isPreSeeded && <span style={styles.preseedBadge}>baseline</span>}
           </div>
           <div style={styles.sessionItemMeta}>
             {totalMin > 0 && <span>{totalMin}m</span>}
@@ -2222,20 +2131,14 @@ function SettingsView({
 
   // Load backups from storage. Refresh when backupVersion bumps.
   useEffect(() => {
-    async function loadBackups() {
-      const loaded = [];
-      for (let i = 0; i < 5; i++) {
-        try {
-          const r = await safeStorage.get(`backup_${i}`);
-          if (r?.value) {
-            const parsed = JSON.parse(r.value);
-            loaded.push({ slot: i, ...parsed });
-          }
-        } catch (e) { /* slot empty */ }
-      }
-      setBackups(loaded);
+    const loaded = [];
+    for (let i = 0; i < 5; i++) {
+      try {
+        const r = storage.get(`backup_${i}`);
+        if (r) loaded.push({ slot: i, ...JSON.parse(r) });
+      } catch (e) { /* slot empty */ }
     }
-    loadBackups();
+    setBackups(loaded);
   }, [backupVersion]);
 
   const restoreBackup = async (backup) => {
@@ -2490,8 +2393,6 @@ function SettingsView({
         )}
       </div>
 
-      <SelfTestsCard sessions={sessions} fingerLog={fingerLog} />
-
       <StorageInspectorCard />
 
       <div style={styles.card}>
@@ -2514,189 +2415,7 @@ function SettingsView({
 // CALCULATIONS
 // ============================================================
 
-function calcACWR(sessions) {
-  const now = new Date();
-  const day = 24 * 60 * 60 * 1000;
-  let acute = 0;
-  let preAcute = 0;        // load in days 7–27 (excludes acute window)
-  const weeksWithData = new Set();
-
-  Object.entries(sessions).forEach(([k, s]) => {
-    const d = new Date(k);
-    const diff = (now - d) / day;
-    const load = calcLoggedLoad(s);
-    if (load <= 0) return;
-    if (diff <= 7) {
-      acute += load;
-    } else if (diff <= 28) {
-      preAcute += load;
-      // Bucket by week (week 0 = days 7–14, week 1 = 14–21, week 2 = 21–28)
-      weeksWithData.add(Math.floor((diff - 7) / 7));
-    }
-  });
-
-  // Divide by actual weeks of data, not always 4 (the bug)
-  const weeksAvailable = weeksWithData.size;
-  const chronic = weeksAvailable > 0 ? preAcute / weeksAvailable : 0;
-  const ratio = chronic > 0 ? acute / chronic : 0;
-
-  return { acute, chronic, ratio, weeksAvailable };
-}
-
-// ============================================================
-// SELF-TESTS — run on demand from Settings → Self-tests.
-// Each test takes the current state and returns { name, pass, msg }.
-// Tests are intentionally permissive (return pass with a note rather
-// than fail) when data is empty or legacy-format, since these aren't
-// corruption — just lack of data.
-// ============================================================
-
-function runSelfTests(sessions, fingerLog) {
-  const results = [];
-  const add = (name, pass, msg = '') => results.push({ name, pass, msg });
-
-  // ---- Schema: sessions ----
-  const sessionEntries = Object.entries(sessions);
-  add(
-    'Sessions: storage readable',
-    typeof sessions === 'object' && sessions !== null,
-    `Found ${sessionEntries.length} session(s)`,
-  );
-
-  let badDates = 0;
-  let badRpe = 0;
-  let badBlocks = 0;
-  let missingDate = 0;
-  sessionEntries.forEach(([key, s]) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) badDates++;
-    if (s.rpe !== undefined && (s.rpe < 0 || s.rpe > 10)) badRpe++;
-    if (s.date && s.date !== key) missingDate++;
-    if (s.blocks && Array.isArray(s.blocks)) {
-      s.blocks.forEach(b => {
-        if (b.actualMin !== undefined && (b.actualMin < 0 || b.actualMin > 600)) badBlocks++;
-        if (!b.name || !b.type) badBlocks++;
-      });
-    }
-  });
-
-  add('Sessions: date keys valid (YYYY-MM-DD)', badDates === 0, badDates === 0 ? 'All keys valid' : `${badDates} invalid keys`);
-  add('Sessions: RPE in range 0–10', badRpe === 0, badRpe === 0 ? 'All in range' : `${badRpe} out of range`);
-  add('Sessions: blocks well-formed', badBlocks === 0, badBlocks === 0 ? 'All blocks valid' : `${badBlocks} malformed blocks`);
-  add('Sessions: keys match date field', missingDate === 0, missingDate === 0 ? 'Consistent' : `${missingDate} mismatches`);
-
-  // ---- Schema: fingers ----
-  const fingerEntries = Object.entries(fingerLog);
-  add('Fingers: storage readable', typeof fingerLog === 'object' && fingerLog !== null, `Found ${fingerEntries.length} entries`);
-
-  let badFingerDates = 0;
-  let badFingerVals = 0;
-  fingerEntries.forEach(([key, v]) => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) badFingerDates++;
-    if (v.left !== undefined && (v.left < 0 || v.left > 10)) badFingerVals++;
-    if (v.right !== undefined && (v.right < 0 || v.right > 10)) badFingerVals++;
-  });
-  add('Fingers: date keys valid', badFingerDates === 0, badFingerDates === 0 ? 'All valid' : `${badFingerDates} invalid`);
-  add('Fingers: pain in range 0–10', badFingerVals === 0, badFingerVals === 0 ? 'All in range' : `${badFingerVals} out of range`);
-
-  // ---- Calc: known-input load fixtures ----
-  // Fixture 1: 90 min easy climbing, RPE 7
-  const fixture1 = {
-    blocks: [{ name: 'Climbing', type: 'climbing', intensity: 'climbing_easy', actualMin: 90 }],
-    rpe: 7,
-  };
-  const expected1 = Math.round(90 * 0.6 * (7 / 7)); // = 54
-  const actual1 = calcLoggedLoad(fixture1);
-  add('Calc: easy climbing 90m @ RPE 7 = 54', actual1 === expected1, `expected ${expected1}, got ${actual1}`);
-
-  // Fixture 2: 75 min limit + 22 min max hangs, RPE 9
-  const fixture2 = {
-    blocks: [
-      { name: 'Climbing (limit)', type: 'climbing', intensity: 'climbing_hard', actualMin: 75 },
-      { name: 'Fingers (max hangs)', type: 'fingers', intensity: 'fingers_high', actualMin: 22 },
-    ],
-    rpe: 9,
-  };
-  const expected2 = Math.round((75 * 1.5 + 22 * 2.2) * (9 / 7)); // = 207
-  const actual2 = calcLoggedLoad(fixture2);
-  add('Calc: strength session = 207', actual2 === expected2, `expected ${expected2}, got ${actual2}`);
-
-  // Fixture 3: empty session
-  add('Calc: empty session = 0', calcLoggedLoad({ blocks: [], rpe: 7 }) === 0, '');
-
-  // Fixture 4: legacy format (climbingMinutes only)
-  const legacy = { climbingMinutes: 60, fingerLoadMinutes: 10, rpe: 7 };
-  const legacyResult = calcLoggedLoad(legacy);
-  add('Calc: legacy format yields >0', legacyResult > 0, `got ${legacyResult}`);
-
-  // ---- Calc: ACWR with known input ----
-  const today = new Date();
-  const day = 24 * 60 * 60 * 1000;
-  const dateKey = (offset) => {
-    const d = new Date(today.getTime() - offset * day);
-    return d.toISOString().split('T')[0];
-  };
-  const acwrFixture = {
-    [dateKey(0)]: { blocks: [{ type: 'climbing', intensity: 'climbing_moderate', actualMin: 100 }], rpe: 7, computedLoad: 100 },
-    [dateKey(8)]: { blocks: [{ type: 'climbing', intensity: 'climbing_moderate', actualMin: 100 }], rpe: 7, computedLoad: 100 },
-  };
-  const acwrResult = calcACWR(acwrFixture);
-  add('Calc: ACWR ratio finite with simple fixture', isFinite(acwrResult.ratio) && acwrResult.ratio > 0, `ratio=${acwrResult.ratio.toFixed(2)}`);
-
-  // ---- Round-trip: JSON serialize/deserialize is lossless ----
-  try {
-    const ser = JSON.stringify(sessions);
-    const deser = JSON.parse(ser);
-    const same = JSON.stringify(deser) === ser;
-    add('Round-trip: sessions JSON lossless', same, same ? `${ser.length} bytes` : 'mismatch after round-trip');
-  } catch (e) {
-    add('Round-trip: sessions JSON lossless', false, `serialization error: ${e.message}`);
-  }
-
-  try {
-    const ser = JSON.stringify(fingerLog);
-    JSON.parse(ser);
-    add('Round-trip: fingers JSON lossless', true, `${ser.length} bytes`);
-  } catch (e) {
-    add('Round-trip: fingers JSON lossless', false, `error: ${e.message}`);
-  }
-
-  // ---- Data weight sanity ----
-  const totalBytes = JSON.stringify(sessions).length + JSON.stringify(fingerLog).length;
-  add('Storage: total data size reasonable', totalBytes < 1000000, `${(totalBytes / 1024).toFixed(1)} KB`);
-
-  return results;
-}
-
-// Persistence tests: round-trip through safeStorage and localStorage.
-async function runStorageRoundTrip() {
-  const testKey = '__self_test_key__';
-  const testValue = JSON.stringify({ ping: Date.now(), data: [1, 2, 3] });
-  const results = [];
-
-  // Test 1: safeStorage round-trip — what the app uses
-  try {
-    await safeStorage.set(testKey, testValue);
-    const result = await safeStorage.get(testKey);
-    const matches = result?.value === testValue;
-    try { await safeStorage.delete(testKey); } catch (e) {}
-    results.push({ name: 'Storage: safeStorage round-trip', pass: matches, msg: matches ? `OK (via ${result?.source})` : 'value mismatch' });
-  } catch (e) {
-    results.push({ name: 'Storage: safeStorage round-trip', pass: false, msg: e.message });
-  }
-
-  // Test 2: localStorage availability — the underlying layer
-  try {
-    const k = '__ls_test__';
-    localStorage.setItem(k, 'x');
-    const v = localStorage.getItem(k);
-    localStorage.removeItem(k);
-    results.push({ name: 'Storage: localStorage available', pass: v === 'x', msg: v === 'x' ? 'OK' : 'unavailable' });
-  } catch (e) {
-    results.push({ name: 'Storage: localStorage available', pass: false, msg: e.message });
-  }
-
-  return results;
-}
+// calcACWR imported from logic.js
 
 function acwrStatus(r) {
   if (r === 0) return { label: 'No data yet', color: '#9ca3af', action: 'Log a few sessions to see your ratio.' };
@@ -2731,89 +2450,358 @@ function NavButton({ icon, label, active, onClick }) {
 }
 
 // ============================================================
-// SELF-TESTS UI
+// UTILS — Timer + Counter
 // ============================================================
 
-function SelfTestsCard({ sessions, fingerLog }) {
-  const [results, setResults] = useState(null);
-  const [running, setRunning] = useState(false);
-  const [lastRun, setLastRun] = useState(null);
+const DEFAULT_PROTOCOLS = [
+  { id: 'repeaters-7-3', name: 'Repeaters 7/3', sets: 6, reps: 6, workSec: 7, restSec: 3, setBetweenSec: 120 },
+  { id: 'max-hangs-10', name: 'Max hangs 10s', sets: 6, reps: 1, workSec: 10, restSec: 180, setBetweenSec: 0 },
+  { id: 'no-hangs-30', name: 'No-hangs 30s', sets: 5, reps: 1, workSec: 30, restSec: 60, setBetweenSec: 0 },
+  { id: 'min-edge-5', name: 'Min-edge 5s', sets: 5, reps: 1, workSec: 5, restSec: 180, setBetweenSec: 0 },
+];
 
-  const runTests = async () => {
-    setRunning(true);
-    setResults(null);
-    // Run sync tests
-    const sync = runSelfTests(sessions, fingerLog);
-    // Run async storage tests (returns an array)
-    const storageTests = await runStorageRoundTrip();
-    const all = [...sync, ...storageTests];
-    setResults(all);
-    setLastRun(new Date());
-    setRunning(false);
+function loadProtocols() {
+  try {
+    const raw = localStorage.getItem('timerProtocols');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return DEFAULT_PROTOCOLS;
+}
+
+function saveProtocols(protocols) {
+  localStorage.setItem('timerProtocols', JSON.stringify(protocols));
+}
+
+function beep(ctx, freq = 880, duration = 0.12, volume = 0.4) {
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(volume, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration);
+}
+
+function UtilsView() {
+  const [tab, setTab] = useState('timer');
+  return (
+    <div>
+      <h1 style={styles.h1}>Tools</h1>
+      <div style={styles.utilsTabs}>
+        <button
+          style={{ ...styles.utilsTab, ...(tab === 'timer' ? styles.utilsTabActive : {}) }}
+          onClick={() => setTab('timer')}
+        >
+          Timer
+        </button>
+        <button
+          style={{ ...styles.utilsTab, ...(tab === 'counter' ? styles.utilsTabActive : {}) }}
+          onClick={() => setTab('counter')}
+        >
+          Counter
+        </button>
+      </div>
+      {tab === 'timer' && <IntervalTimer />}
+      {tab === 'counter' && <TapCounter />}
+    </div>
+  );
+}
+
+function IntervalTimer() {
+  const [protocols, setProtocols] = useState(loadProtocols);
+  const [selectedId, setSelectedId] = useState(protocols[0]?.id ?? null);
+  const [editing, setEditing] = useState(false);
+  const [editProto, setEditProto] = useState(null);
+
+  // Timer state
+  const [phase, setPhase] = useState(null); // null | 'work' | 'rest' | 'set-rest' | 'done'
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [currentSet, setCurrentSet] = useState(1);
+  const [currentRep, setCurrentRep] = useState(1);
+  const intervalRef = useRef(null);
+  const audioCtxRef = useRef(null);
+
+  const proto = protocols.find(p => p.id === selectedId) ?? protocols[0];
+
+  const getAudioCtx = () => {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtxRef.current;
   };
 
-  const passCount = results ? results.filter(r => r.pass).length : 0;
-  const failCount = results ? results.filter(r => !r.pass).length : 0;
-  const allPass = results && failCount === 0;
+  const stop = useCallback(() => {
+    clearInterval(intervalRef.current);
+    setPhase(null);
+    setTimeLeft(0);
+    setCurrentSet(1);
+    setCurrentRep(1);
+  }, []);
+
+  const startTimer = useCallback((phaseName, seconds, nextFn) => {
+    clearInterval(intervalRef.current);
+    setPhase(phaseName);
+    setTimeLeft(seconds);
+    let remaining = seconds;
+    intervalRef.current = setInterval(() => {
+      remaining -= 1;
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(intervalRef.current);
+        nextFn();
+      } else if (remaining <= 3) {
+        beep(getAudioCtx(), 660, 0.08);
+      }
+    }, 1000);
+  }, []);
+
+  const advance = useCallback((set, rep) => {
+    if (!proto) return;
+    const { sets, reps, workSec, restSec, setBetweenSec } = proto;
+
+    if (rep < reps) {
+      // next rep: rest then work
+      beep(getAudioCtx(), 440, 0.15);
+      startTimer('rest', restSec, () => {
+        beep(getAudioCtx(), 880, 0.2);
+        setCurrentRep(rep + 1);
+        startTimer('work', workSec, () => advance(set, rep + 1));
+      });
+    } else if (set < sets) {
+      // end of set
+      beep(getAudioCtx(), 330, 0.3);
+      if (setBetweenSec > 0) {
+        startTimer('set-rest', setBetweenSec, () => {
+          beep(getAudioCtx(), 880, 0.2);
+          setCurrentSet(set + 1);
+          setCurrentRep(1);
+          startTimer('work', workSec, () => advance(set + 1, 1));
+        });
+      } else {
+        setCurrentSet(set + 1);
+        setCurrentRep(1);
+        startTimer('work', workSec, () => advance(set + 1, 1));
+      }
+    } else {
+      // done
+      beep(getAudioCtx(), 220, 0.5);
+      beep(getAudioCtx(), 440, 0.4);
+      setPhase('done');
+    }
+  }, [proto, startTimer]);
+
+  const start = () => {
+    if (!proto) return;
+    beep(getAudioCtx(), 880, 0.2);
+    setCurrentSet(1);
+    setCurrentRep(1);
+    startTimer('work', proto.workSec, () => advance(1, 1));
+  };
+
+  useEffect(() => () => clearInterval(intervalRef.current), []);
+
+  const phaseColors = { work: '#10b981', rest: '#f59e0b', 'set-rest': '#3b82f6', done: '#8b5cf6' };
+  const phaseLabels = { work: 'HANG', rest: 'REST', 'set-rest': 'SET REST', done: 'DONE' };
+
+  const saveEdit = () => {
+    const updated = protocols.map(p => p.id === editProto.id ? editProto : p);
+    setProtocols(updated);
+    saveProtocols(updated);
+    setEditing(false);
+  };
+
+  const addProtocol = () => {
+    const np = { id: `custom-${Date.now()}`, name: 'Custom', sets: 5, reps: 6, workSec: 7, restSec: 3, setBetweenSec: 120 };
+    const updated = [...protocols, np];
+    setProtocols(updated);
+    saveProtocols(updated);
+    setSelectedId(np.id);
+    setEditProto({ ...np });
+    setEditing(true);
+  };
+
+  const deleteProtocol = (id) => {
+    const updated = protocols.filter(p => p.id !== id);
+    setProtocols(updated);
+    saveProtocols(updated);
+    if (selectedId === id) setSelectedId(updated[0]?.id ?? null);
+  };
 
   return (
-    <div style={styles.card}>
-      <h3 style={styles.h3}>Self-tests</h3>
-      <p style={styles.subtle}>
-        Run a battery of checks against your data and calculations. Run this after any
-        app change to catch corruption or regressions early.
-      </p>
-
-      <button
-        style={{
-          ...styles.btnSecondary,
-          width: '100%',
-          background: running ? '#1f2937' : '#10b981',
-          color: running ? '#9ca3af' : '#000',
-        }}
-        onClick={runTests}
-        disabled={running}
-      >
-        {running ? '⏳ Running…' : '▶ Run self-tests'}
-      </button>
-
-      {results && (
-        <div style={{ marginTop: 12 }}>
-          <div style={{
-            ...styles.testSummary,
-            background: allPass ? '#064e3b' : '#7f1d1d',
-            color: allPass ? '#a7f3d0' : '#fecaca',
-            border: `1px solid ${allPass ? '#10b981' : '#ef4444'}`,
-          }}>
-            {allPass ? '✓ All tests passed' : `✗ ${failCount} of ${results.length} failed`}
-            <span style={styles.testTs}>
-              {lastRun?.toLocaleTimeString()}
-            </span>
+    <div>
+      {/* Protocol selector */}
+      <div style={styles.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h3 style={styles.h3}>Protocol</h3>
+          <button style={styles.btnSmall} onClick={addProtocol}>+ New</button>
+        </div>
+        <div style={styles.protoList}>
+          {protocols.map(p => (
+            <div
+              key={p.id}
+              style={{ ...styles.protoItem, ...(p.id === selectedId ? styles.protoItemActive : {}) }}
+              onClick={() => { setSelectedId(p.id); stop(); }}
+            >
+              <div style={styles.protoItemName}>{p.name}</div>
+              <div style={styles.protoItemMeta}>
+                {p.sets}s × {p.reps}r · {p.workSec}/{p.restSec}s
+                {p.setBetweenSec > 0 ? ` · ${p.setBetweenSec}s between` : ''}
+              </div>
+            </div>
+          ))}
+        </div>
+        {proto && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button style={{ ...styles.btnSmall, flex: 1 }} onClick={() => { setEditProto({ ...proto }); setEditing(true); }}>Edit</button>
+            {!DEFAULT_PROTOCOLS.find(d => d.id === proto.id) && (
+              <button style={{ ...styles.btnSmall, flex: 1, color: '#ef4444' }} onClick={() => deleteProtocol(proto.id)}>Delete</button>
+            )}
           </div>
+        )}
+      </div>
 
-          <div style={styles.testList}>
-            {results.map((r, i) => {
-              const color = r.informational ? '#6b7280' : (r.pass ? '#10b981' : '#ef4444');
-              const icon = r.informational ? 'ⓘ' : (r.pass ? '✓' : '✗');
-              return (
-                <div
-                  key={i}
-                  style={{
-                    ...styles.testRow,
-                    borderLeftColor: color,
-                  }}
-                >
-                  <div style={styles.testRowTop}>
-                    <span style={{ ...styles.testIcon, color }}>
-                      {icon}
-                    </span>
-                    <span style={styles.testName}>{r.name}</span>
-                  </div>
-                  {r.msg && <div style={styles.testMsg}>{r.msg}</div>}
+      {/* Edit modal */}
+      {editing && editProto && (
+        <div style={styles.modalOverlay} onClick={() => setEditing(false)}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <div style={styles.modalTitle}>Edit Protocol</div>
+              <button style={styles.modalClose} onClick={() => setEditing(false)}><X size={20} /></button>
+            </div>
+            {[
+              { label: 'Name', key: 'name', type: 'text' },
+              { label: 'Sets', key: 'sets', type: 'number' },
+              { label: 'Reps per set', key: 'reps', type: 'number' },
+              { label: 'Work (seconds)', key: 'workSec', type: 'number' },
+              { label: 'Rest between reps (seconds)', key: 'restSec', type: 'number' },
+              { label: 'Rest between sets (seconds)', key: 'setBetweenSec', type: 'number' },
+            ].map(({ label, key, type }) => (
+              <div key={key} style={styles.card}>
+                <label style={styles.label}>{label}</label>
+                <input
+                  type={type}
+                  value={editProto[key]}
+                  onChange={e => setEditProto({ ...editProto, [key]: type === 'number' ? parseInt(e.target.value) || 0 : e.target.value })}
+                  style={styles.dateInput}
+                />
+              </div>
+            ))}
+            <div style={{ padding: '0 16px 16px' }}>
+              <button style={{ ...styles.btnPrimary, width: '100%' }} onClick={saveEdit}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Timer display */}
+      {proto && (
+        <div style={styles.card}>
+          <div style={styles.timerDisplay}>
+            {phase ? (
+              <>
+                <div style={{ ...styles.timerPhase, color: phaseColors[phase] || '#fff' }}>
+                  {phaseLabels[phase] ?? phase.toUpperCase()}
                 </div>
-              );
-            })}
+                <div style={{ ...styles.timerCountdown, color: phaseColors[phase] || '#fff' }}>
+                  {phase === 'done' ? '✓' : timeLeft}
+                </div>
+                {phase !== 'done' && (
+                  <div style={styles.timerProgress}>
+                    Set {currentSet}/{proto.sets} · Rep {currentRep}/{proto.reps}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={styles.timerIdleLabel}>{proto.name}</div>
+                <div style={styles.timerIdleMeta}>
+                  {proto.sets} sets × {proto.reps} reps · {proto.workSec}s on / {proto.restSec}s off
+                  {proto.setBetweenSec > 0 ? ` · ${proto.setBetweenSec}s between sets` : ''}
+                </div>
+              </>
+            )}
           </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            {!phase ? (
+              <button style={{ ...styles.btnPrimary, flex: 1, fontSize: 18 }} onClick={start}>Start</button>
+            ) : (
+              <button style={{ ...styles.btnDanger, flex: 1 }} onClick={stop}>Stop</button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Counter ────────────────────────────────────────────────────────────────
+
+function TapCounter() {
+  const [mode, setMode] = useState('single'); // 'single' | 'grade' | 'type'
+  const [counts, setCounts] = useState({});
+
+  const GRADE_KEYS = ['V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8'];
+  const TYPE_KEYS = ['Climbing reps', 'Fingers sets', 'Pull sets'];
+
+  const activeKeys = mode === 'grade' ? GRADE_KEYS : mode === 'type' ? TYPE_KEYS : ['count'];
+  const total = Object.values(counts).reduce((s, v) => s + v, 0);
+
+  const inc = (key) => setCounts(c => ({ ...c, [key]: (c[key] || 0) + 1 }));
+  const dec = (key) => setCounts(c => ({ ...c, [key]: Math.max(0, (c[key] || 0) - 1) }));
+  const reset = () => setCounts({});
+
+  return (
+    <div>
+      <div style={styles.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={styles.h3}>Total: {total}</h3>
+          <button style={{ ...styles.btnSmall, color: '#ef4444' }} onClick={reset}>Reset</button>
+        </div>
+        <div style={styles.counterModes}>
+          {['single', 'grade', 'type'].map(m => (
+            <button
+              key={m}
+              style={{ ...styles.counterMode, ...(mode === m ? styles.counterModeActive : {}) }}
+              onClick={() => { setMode(m); reset(); }}
+            >
+              {m.charAt(0).toUpperCase() + m.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mode === 'single' && (
+        <div style={styles.card}>
+          <button
+            style={styles.tapZone}
+            onClick={() => inc('count')}
+          >
+            <div style={styles.tapCount}>{counts['count'] || 0}</div>
+            <div style={styles.tapLabel}>TAP</div>
+          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button style={{ ...styles.btnSecondary, flex: 1 }} onClick={() => dec('count')}>−1</button>
+            <button style={{ ...styles.btnSecondary, flex: 1 }} onClick={() => setCounts(c => ({ ...c, count: Math.max(0, (c.count || 0) - 5) }))}>−5</button>
+          </div>
+        </div>
+      )}
+
+      {(mode === 'grade' || mode === 'type') && (
+        <div style={styles.card}>
+          {activeKeys.map(key => (
+            <div key={key} style={styles.counterRow}>
+              <div style={styles.counterKey}>{key}</div>
+              <div style={styles.counterControls}>
+                <button style={styles.counterBtn} onClick={() => dec(key)}>−</button>
+                <div style={styles.counterVal}>{counts[key] || 0}</div>
+                <button style={{ ...styles.counterBtn, background: '#10b981', color: '#000' }} onClick={() => inc(key)}>+</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -2836,34 +2824,18 @@ function StorageInspectorCard() {
     setError(null);
     setEntries(null);
     try {
-      // Known keys the app uses
       const knownKeys = [
         'sessions', 'fingerLog', 'currentPhase', 'travelMode', 'phaseStartDate',
         'lastExportTs',
         'backup_0', 'backup_1', 'backup_2', 'backup_3', 'backup_4',
       ];
 
-      // Also collect any localStorage keys with our prefix (send_*)
-      const lsKeys = [];
-      try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith('send_')) {
-            lsKeys.push(k.replace(/^send_/, ''));
-          }
-        }
-      } catch (e) {}
-
-      // Merge known + localStorage keys, dedupe
-      const allKeys = Array.from(new Set([...knownKeys, ...lsKeys]));
-
       const found = [];
-      for (const key of allKeys) {
+      for (const key of knownKeys) {
         try {
-          // Use safeStorage so we find data wherever it actually lives
-          const r = await safeStorage.get(key);
-          if (r && r.value !== undefined) {
-            found.push({ key, value: r.value, source: r.source });
+          const v = storage.get(key);
+          if (v !== null && v !== undefined) {
+            found.push({ key, value: v, source: 'localStorage' });
           }
         } catch (e) { /* key doesn't exist */ }
       }
@@ -3159,6 +3131,7 @@ const styles = {
   sessionItemRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 },
   sessionItemLoad: { fontFamily: '"JetBrains Mono", monospace', fontSize: 16, fontWeight: 700, color: '#fde68a' },
   customBadge: { fontFamily: '"JetBrains Mono", monospace', fontSize: 8, fontWeight: 700, color: '#fde68a', background: '#422006', padding: '1px 5px', borderRadius: 3, letterSpacing: '0.05em', textTransform: 'uppercase' },
+  preseedBadge: { fontFamily: '"JetBrains Mono", monospace', fontSize: 8, fontWeight: 700, color: '#6b7280', background: '#1f2937', padding: '1px 5px', borderRadius: 3, letterSpacing: '0.05em', textTransform: 'uppercase' },
   sessionItemExpanded: { marginTop: 10, paddingTop: 10, borderTop: '1px solid #1f2937' },
   sessionBlocksList: { display: 'flex', flexDirection: 'column', gap: 4 },
   sessionBlock: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, gap: 8 },
@@ -3213,4 +3186,40 @@ const styles = {
   quickPickRow: { display: 'flex', gap: 6, marginTop: 10 },
   quickPickBtn: { flex: 1, padding: '8px 0', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' },
   loggedBadge: { display: 'inline-block', background: '#064e3b', color: '#10b981', padding: '1px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginLeft: 6 },
+
+  // S&C workout detail expand
+  scSectionHeading: { fontFamily: '"JetBrains Mono", monospace', fontSize: 10, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 },
+  scSectionItem: { fontSize: 12, color: '#d1d5db', lineHeight: 1.6, paddingLeft: 4 },
+
+  // Utils tab
+  utilsTabs: { display: 'flex', gap: 8, marginBottom: 16 },
+  utilsTab: { flex: 1, padding: '10px', border: '1px solid #1f2937', borderRadius: 8, background: 'transparent', color: '#9ca3af', fontWeight: 700, fontSize: 13 },
+  utilsTabActive: { background: '#10b981', color: '#000', border: '1px solid #10b981' },
+
+  // Timer
+  timerDisplay: { textAlign: 'center', padding: '20px 0' },
+  timerPhase: { fontFamily: '"JetBrains Mono", monospace', fontSize: 13, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8 },
+  timerCountdown: { fontFamily: '"JetBrains Mono", monospace', fontSize: 72, fontWeight: 700, lineHeight: 1, marginBottom: 8 },
+  timerProgress: { fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: '#9ca3af' },
+  timerIdleLabel: { fontSize: 18, fontWeight: 700, color: '#f3f4f6', marginBottom: 8 },
+  timerIdleMeta: { fontSize: 12, color: '#9ca3af', lineHeight: 1.6 },
+  protoList: { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 },
+  protoItem: { background: '#0f172a', border: '1px solid #1e293b', borderRadius: 6, padding: '10px 12px', cursor: 'pointer' },
+  protoItemActive: { borderColor: '#10b981', background: '#0a1f14' },
+  protoItemName: { fontSize: 13, fontWeight: 700, color: '#f3f4f6', marginBottom: 2 },
+  protoItemMeta: { fontFamily: '"JetBrains Mono", monospace', fontSize: 10, color: '#9ca3af' },
+  btnSmall: { background: '#1f2937', color: '#d1d5db', border: 'none', padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600 },
+
+  // Counter
+  counterModes: { display: 'flex', gap: 8, marginTop: 10 },
+  counterMode: { flex: 1, padding: '8px', border: '1px solid #1f2937', borderRadius: 6, background: 'transparent', color: '#9ca3af', fontWeight: 700, fontSize: 12 },
+  counterModeActive: { background: '#10b981', color: '#000', borderColor: '#10b981' },
+  tapZone: { width: '100%', background: '#0f172a', border: '2px solid #1f2937', borderRadius: 12, padding: '40px 20px', textAlign: 'center', cursor: 'pointer' },
+  tapCount: { fontFamily: '"JetBrains Mono", monospace', fontSize: 80, fontWeight: 700, color: '#10b981', lineHeight: 1 },
+  tapLabel: { fontFamily: '"JetBrains Mono", monospace', fontSize: 12, color: '#9ca3af', marginTop: 8, letterSpacing: '0.2em' },
+  counterRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #1f2937' },
+  counterKey: { fontSize: 14, fontWeight: 700, color: '#f3f4f6' },
+  counterControls: { display: 'flex', alignItems: 'center', gap: 12 },
+  counterBtn: { width: 36, height: 36, border: 'none', borderRadius: 6, background: '#1f2937', color: '#d1d5db', fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  counterVal: { fontFamily: '"JetBrains Mono", monospace', fontSize: 22, fontWeight: 700, color: '#f3f4f6', minWidth: 40, textAlign: 'center' },
 };
