@@ -578,16 +578,23 @@ runMigrations(storage);
 
 // Shared export helper used by both Today banner and Settings.
 // Opens the JSON in a new tab so iOS users can Share → Save to Files.
+async function shareOrOpenBlob(filename, blob) {
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: blob.type })] })) {
+    const file = new File([blob], filename, { type: blob.type });
+    await navigator.share({ files: [file], title: filename });
+  } else {
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+}
+
 function doExport(sessions, fingerLog) {
   const data = { sessions, fingerLog, exportedAt: new Date().toISOString() };
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  // window.open with _blank navigates to the blob — iOS shows it inline,
-  // user taps Share → Save to Files. Desktop browsers open a new tab with the JSON.
-  window.open(url, '_blank');
-  // Don't revoke immediately — the new tab needs the URL alive. Defer cleanup.
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const filename = `climbing-backup-${new Date().toISOString().split('T')[0]}.json`;
+  shareOrOpenBlob(filename, blob);
 }
 
 export default function ClimbingApp() {
@@ -2185,10 +2192,9 @@ function SettingsView({
       };
       const json = JSON.stringify(data, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      setRestoreStatus({ ok: true, msg: `Opened backup slot ${backup.slot} in new tab (${sCount}s, ${fCount}f). Tap Share → Save to Files.` });
+      const filename = `climbing-backup-slot${backup.slot}-${new Date().toISOString().split('T')[0]}.json`;
+      shareOrOpenBlob(filename, blob);
+      setRestoreStatus({ ok: true, msg: `Sharing backup slot ${backup.slot} (${sCount}s, ${fCount}f).` });
     } catch (e) {
       setRestoreStatus({ ok: false, msg: `Open failed: ${e.message}` });
     }
