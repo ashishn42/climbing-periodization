@@ -723,17 +723,20 @@ export default function ClimbingApp() {
             {activePhase.name} · W{currentWeek}/{activePhase.totalWeeks}
           </div>
         </div>
-        <button
-          style={{
-            ...styles.travelToggleHeader,
-            background: travelMode ? '#06b6d4' : '#1f2937',
-            color: travelMode ? '#000' : '#9ca3af',
-          }}
-          onClick={() => persistTravel(!travelMode)}
-          title={travelMode ? 'Travel mode ON' : 'Travel mode OFF'}
-        >
-          <Plane size={14} />
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            style={{
+              ...styles.travelToggleHeader,
+              background: travelMode ? '#06b6d4' : '#1f2937',
+              color: travelMode ? '#000' : '#9ca3af',
+            }}
+            onClick={() => persistTravel(!travelMode)}
+            title={travelMode ? 'Travel mode ON' : 'Travel mode OFF'}
+          >
+            <Plane size={14} />
+          </button>
+          <button style={styles.settingsBtn} onClick={() => setView('settings')}>⚙</button>
+        </div>
       </header>
 
       <main style={styles.main}>
@@ -816,8 +819,6 @@ export default function ClimbingApp() {
         <NavButton icon={<AlertCircle size={18} />} label="Fingers" active={view === 'fingers'} onClick={() => setView('fingers')} />
         <NavButton icon={<Timer size={18} />} label="Tools" active={view === 'utils'} onClick={() => setView('utils')} />
       </nav>
-
-      <button style={styles.settingsBtn} onClick={() => setView('settings')}>⚙</button>
 
       {viewingDay && (
         <DayDetailModal
@@ -3061,7 +3062,7 @@ const styles = {
   app: { fontFamily: '"Manrope", -apple-system, system-ui, sans-serif', background: '#0a0a0a', color: '#f3f4f6', minHeight: '100vh', maxWidth: 560, margin: '0 auto', paddingBottom: 80, position: 'relative' },
   loadingContainer: { minHeight: '100vh', background: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' },
   loadingText: { fontFamily: '"JetBrains Mono", monospace', fontSize: 14, letterSpacing: '0.1em' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 16px', borderBottom: '1px solid #1f2937', position: 'sticky', top: 0, background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(8px)', zIndex: 10 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px 16px', paddingTop: 'calc(env(safe-area-inset-top) + 12px)', borderBottom: '1px solid #1f2937', position: 'sticky', top: 0, background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(8px)', zIndex: 10 },
   headerLeft: { display: 'flex', alignItems: 'center', gap: 12 },
   appTitle: { fontFamily: '"JetBrains Mono", monospace', fontSize: 18, fontWeight: 700, letterSpacing: '0.2em', color: '#10b981' },
   phaseBadge: { fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 4, color: '#000', letterSpacing: '0.05em', textTransform: 'uppercase' },
@@ -3175,10 +3176,10 @@ const styles = {
   phaseBtn: { padding: '14px 12px', border: 'none', borderRadius: 8, fontSize: 14, textAlign: 'left' },
   phaseBtnWeeks: { fontFamily: '"JetBrains Mono", monospace', fontSize: 10, marginTop: 2, opacity: 0.7 },
   toggleBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', padding: '14px', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14 },
-  nav: { position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(12px)', borderTop: '1px solid #1f2937', display: 'flex', justifyContent: 'space-around', padding: '8px 0 12px', maxWidth: 560, margin: '0 auto' },
+  nav: { position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(12px)', borderTop: '1px solid #1f2937', display: 'flex', justifyContent: 'space-around', paddingTop: 8, paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' },
   navBtn: { background: 'transparent', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 12px', flex: 1 },
   navLabel: { fontSize: 10, fontWeight: 700, fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.05em' },
-  settingsBtn: { position: 'fixed', top: 16, right: 16, width: 32, height: 32, background: '#1f2937', border: 'none', borderRadius: 6, color: '#9ca3af', fontSize: 16, zIndex: 20 },
+  settingsBtn: { width: 32, height: 32, background: '#1f2937', border: 'none', borderRadius: 6, color: '#9ca3af', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   // Flexible Log styles
   logBlockHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8, flexWrap: 'wrap' },

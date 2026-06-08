@@ -11,3 +11,6 @@ dist/
 .vercel
 coverage/
 .nyc_output/
+.env*
+.claude/settings.local.json
+.claude/
