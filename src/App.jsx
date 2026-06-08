@@ -3066,7 +3066,7 @@ const styles = {
   headerLeft: { display: 'flex', alignItems: 'center', gap: 12 },
   appTitle: { fontFamily: '"JetBrains Mono", monospace', fontSize: 18, fontWeight: 700, letterSpacing: '0.2em', color: '#10b981' },
   phaseBadge: { fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 4, color: '#000', letterSpacing: '0.05em', textTransform: 'uppercase' },
-  travelToggleHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, border: 'none', borderRadius: 6, marginRight: 40 },
+  travelToggleHeader: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, border: 'none', borderRadius: 6 },
   main: { padding: '20px' },
   h1: { fontSize: 28, fontWeight: 800, margin: '0 0 4px', letterSpacing: '-0.02em' },
   h3: { fontSize: 16, fontWeight: 700, margin: '0 0 8px' },
