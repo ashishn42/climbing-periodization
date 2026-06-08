@@ -600,7 +600,8 @@ export default function ClimbingApp() {
   const [loading, setLoading] = useState(true);
   const [backupVersion, setBackupVersion] = useState(0);
   const [viewingDay, setViewingDay] = useState(null);
-  const [logDate, setLogDate] = useState(null); // date string when navigating from History to edit a past log
+  const [logDate, setLogDate] = useState(null);
+  const [returnView, setReturnView] = useState(null); // view to go back to after editing from History
   const [lastExportTs, setLastExportTs] = useState(null);
   const [showRestorePrompt, setShowRestorePrompt] = useState(false);
 
@@ -764,13 +765,14 @@ export default function ClimbingApp() {
             weekProg={weekProg}
             initialDate={logDate}
             onClearInitialDate={() => setLogDate(null)}
+            onBack={returnView ? () => { setView(returnView); setReturnView(null); } : null}
           />
         )}
         {view === 'acwr' && (
           <HistoryView
             sessions={sessions}
             fingerLog={fingerLog}
-            onEditSession={(date) => { setLogDate(date); setView('log'); }}
+            onEditSession={(date) => { setLogDate(date); setView('log'); setReturnView('acwr'); }}
           />
         )}
         {view === 'fingers' && (
@@ -793,7 +795,10 @@ export default function ClimbingApp() {
             onMarkExported={() => persistLastExport(new Date().toISOString())}
           />
         )}
-        {view === 'utils' && <UtilsView />}
+        {/* Always mounted so timer survives tab switches */}
+        <div style={{ display: view === 'utils' ? 'block' : 'none' }}>
+          <UtilsView />
+        </div>
       </main>
 
       <nav style={styles.nav}>
@@ -1152,7 +1157,7 @@ function DayDetailModal({ day, phase, phaseKey, weekProg, onClose }) {
 // LOG
 // ============================================================
 
-function LogView({ sessions, onUpdate, phase, phaseKey, weekProg, initialDate, onClearInitialDate }) {
+function LogView({ sessions, onUpdate, phase, phaseKey, weekProg, initialDate, onClearInitialDate, onBack }) {
   // Selected date — defaults to today, can be changed via picker.
   const [selectedDate, setSelectedDate] = useState(initialDate || todayKey());
 
@@ -1283,7 +1288,14 @@ function LogView({ sessions, onUpdate, phase, phaseKey, weekProg, initialDate, o
 
   return (
     <div>
-      <h1 style={styles.h1}>Log</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        {onBack && (
+          <button onClick={onBack} style={styles.backBtn}>
+            <ChevronLeft size={18} /> Back
+          </button>
+        )}
+        <h1 style={{ ...styles.h1, margin: 0 }}>Log</h1>
+      </div>
       <p style={styles.subtle}>
         {isToday ? 'Today' : isPast ? 'Past date' : 'Future date'} · {dateLabel}
         {isLogged && <span style={styles.loggedBadge}> · LOGGED</span>}
@@ -1952,22 +1964,28 @@ function SessionListItem({ date, session, fingerEntry, onEdit }) {
   );
 }
 
+function localDate(k) {
+  const [y, m, d] = k.split('-').map(Number);
+  return new Date(y, m - 1, d); // local midnight — avoids UTC timezone shift
+}
+
 function ACWRChart({ sessions }) {
-  const weeks = [];
-  for (let i = 7; i >= 0; i--) {
-    const end = new Date();
-    end.setDate(end.getDate() - i * 7);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 6);
-    let total = 0;
-    Object.entries(sessions).forEach(([k, s]) => {
-      const d = new Date(k);
-      if (d >= start && d <= end) {
-        total += calcLoggedLoad(s);
-      }
-    });
-    weeks.push({ week: `W${8-i}`, total: Math.round(total) });
-  }
+  const now = new Date();
+  const DAY = 24 * 60 * 60 * 1000;
+  // 8 rolling buckets of 7 days each, bucket 0 = most recent
+  const buckets = Array(8).fill(0);
+  Object.entries(sessions).forEach(([k, s]) => {
+    const diff = (now - localDate(k)) / DAY;
+    if (diff < 0 || diff >= 56) return;
+    const slot = Math.min(7, Math.floor(diff / 7));
+    buckets[slot] += calcLoggedLoad(s);
+  });
+  // Display oldest → newest
+  const weeks = [...buckets].reverse().map((total, i) => ({
+    week: `W${i + 1}`,
+    total: Math.round(total),
+    isPreseeded: true,
+  }));
   const max = Math.max(...weeks.map(w => w.total), 60);
 
   return (
@@ -2455,9 +2473,9 @@ function NavButton({ icon, label, active, onClick }) {
 
 const DEFAULT_PROTOCOLS = [
   { id: 'repeaters-7-3', name: 'Repeaters 7/3', sets: 6, reps: 6, workSec: 7, restSec: 3, setBetweenSec: 120 },
-  { id: 'max-hangs-10', name: 'Max hangs 10s', sets: 6, reps: 1, workSec: 10, restSec: 180, setBetweenSec: 0 },
-  { id: 'no-hangs-30', name: 'No-hangs 30s', sets: 5, reps: 1, workSec: 30, restSec: 60, setBetweenSec: 0 },
-  { id: 'min-edge-5', name: 'Min-edge 5s', sets: 5, reps: 1, workSec: 5, restSec: 180, setBetweenSec: 0 },
+  { id: 'max-hangs-10', name: 'Max hangs 10s', sets: 6, reps: 1, workSec: 10, restSec: 180, setBetweenSec: 180 },
+  { id: 'no-hangs-30', name: 'No-hangs 30s', sets: 5, reps: 1, workSec: 30, restSec: 60, setBetweenSec: 60 },
+  { id: 'min-edge-5', name: 'Min-edge 5s', sets: 5, reps: 1, workSec: 5, restSec: 180, setBetweenSec: 180 },
 ];
 
 function loadProtocols() {
@@ -2470,6 +2488,31 @@ function loadProtocols() {
 
 function saveProtocols(protocols) {
   localStorage.setItem('timerProtocols', JSON.stringify(protocols));
+}
+
+const TIMER_KEY = 'timerSession';
+
+function saveTimerSession(s) {
+  localStorage.setItem(TIMER_KEY, JSON.stringify({ ...s, savedAt: Date.now() }));
+}
+
+function clearTimerSession() {
+  localStorage.removeItem(TIMER_KEY);
+}
+
+function restoreTimerSession() {
+  try {
+    const raw = localStorage.getItem(TIMER_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s.phase || s.phase === 'done') return null;
+    if (s.isPaused) return s; // paused — restore exactly
+    // Was running when app closed — subtract elapsed, restore as paused
+    const elapsed = Math.floor((Date.now() - s.savedAt) / 1000);
+    const remaining = s.timeLeft - elapsed;
+    if (remaining <= 0) { clearTimerSession(); return null; }
+    return { ...s, timeLeft: remaining, isPaused: true };
+  } catch (e) { return null; }
 }
 
 function beep(ctx, freq = 880, duration = 0.12, volume = 0.4) {
@@ -2512,121 +2555,155 @@ function UtilsView() {
 
 function IntervalTimer() {
   const [protocols, setProtocols] = useState(loadProtocols);
-  const [selectedId, setSelectedId] = useState(protocols[0]?.id ?? null);
   const [editing, setEditing] = useState(false);
   const [editProto, setEditProto] = useState(null);
 
-  // Timer state
-  const [phase, setPhase] = useState(null); // null | 'work' | 'rest' | 'set-rest' | 'done'
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [currentSet, setCurrentSet] = useState(1);
-  const [currentRep, setCurrentRep] = useState(1);
+  // Restore persisted timer state on mount (survives tab switch + app close)
+  const [restored] = useState(() => restoreTimerSession());
+  const [phase, setPhase] = useState(restored?.phase ?? null);
+  const [timeLeft, setTimeLeft] = useState(restored?.timeLeft ?? 0);
+  const [currentSet, setCurrentSet] = useState(restored?.set ?? 1);
+  const [currentRep, setCurrentRep] = useState(restored?.rep ?? 1);
+  const [isPaused, setIsPaused] = useState(restored?.isPaused ?? false);
+  const [selectedId, setSelectedId] = useState(restored?.protocolId ?? protocols[0]?.id ?? null);
+
   const intervalRef = useRef(null);
   const audioCtxRef = useRef(null);
+  // Refs so interval closures always see fresh values without stale captures
+  const phaseRef = useRef(phase);
+  const tlRef = useRef(timeLeft);
+  const setNumRef = useRef(currentSet);
+  const repRef = useRef(currentRep);
+  const protoRef = useRef(null);
+  const selectedIdRef = useRef(selectedId);
 
   const proto = protocols.find(p => p.id === selectedId) ?? protocols[0];
+  protoRef.current = proto;
+  selectedIdRef.current = selectedId;
+
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { tlRef.current = timeLeft; }, [timeLeft]);
+  useEffect(() => { setNumRef.current = currentSet; }, [currentSet]);
+  useEffect(() => { repRef.current = currentRep; }, [currentRep]);
 
   const getAudioCtx = () => {
-    if (!audioCtxRef.current) {
+    if (!audioCtxRef.current)
       audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
     return audioCtxRef.current;
+  };
+
+  const persist = (p, tl, s, r, paused) => {
+    if (!p || p === 'done') { clearTimerSession(); return; }
+    saveTimerSession({ phase: p, timeLeft: tl, set: s, rep: r, isPaused: paused, protocolId: selectedIdRef.current });
   };
 
   const stop = useCallback(() => {
     clearInterval(intervalRef.current);
-    setPhase(null);
-    setTimeLeft(0);
-    setCurrentSet(1);
-    setCurrentRep(1);
+    setPhase(null); setTimeLeft(0); setCurrentSet(1); setCurrentRep(1); setIsPaused(false);
+    clearTimerSession();
   }, []);
 
-  const startTimer = useCallback((phaseName, seconds, nextFn) => {
+  const pause = () => {
     clearInterval(intervalRef.current);
-    setPhase(phaseName);
-    setTimeLeft(seconds);
+    setIsPaused(true);
+    persist(phaseRef.current, tlRef.current, setNumRef.current, repRef.current, true);
+  };
+
+  // Run a countdown interval for a given phase, calling onEnd when it reaches 0
+  const runCountdown = useCallback((phaseName, seconds, s, r, onEnd) => {
+    clearInterval(intervalRef.current);
+    setPhase(phaseName); phaseRef.current = phaseName;
+    setCurrentSet(s); setNumRef.current = s;
+    setCurrentRep(r); repRef.current = r;
+    setTimeLeft(seconds); tlRef.current = seconds;
+    setIsPaused(false);
+    persist(phaseName, seconds, s, r, false);
     let remaining = seconds;
     intervalRef.current = setInterval(() => {
       remaining -= 1;
-      setTimeLeft(remaining);
-      if (remaining <= 0) {
-        clearInterval(intervalRef.current);
-        nextFn();
-      } else if (remaining <= 3) {
-        beep(getAudioCtx(), 660, 0.08);
-      }
+      setTimeLeft(remaining); tlRef.current = remaining;
+      persist(phaseRef.current, remaining, setNumRef.current, repRef.current, false);
+      if (remaining > 0 && remaining <= 3) beep(getAudioCtx(), 660, 0.08);
+      if (remaining <= 0) { clearInterval(intervalRef.current); onEnd(); }
     }, 1000);
   }, []);
 
-  const advance = useCallback((set, rep) => {
-    if (!proto) return;
-    const { sets, reps, workSec, restSec, setBetweenSec } = proto;
-
-    if (rep < reps) {
-      // next rep: rest then work
+  const advance = useCallback((s, r) => {
+    const p = protoRef.current;
+    if (!p) return;
+    const { sets, reps, workSec, restSec, setBetweenSec } = p;
+    if (r < reps) {
       beep(getAudioCtx(), 440, 0.15);
-      startTimer('rest', restSec, () => {
+      runCountdown('rest', restSec, s, r, () => {
         beep(getAudioCtx(), 880, 0.2);
-        setCurrentRep(rep + 1);
-        startTimer('work', workSec, () => advance(set, rep + 1));
+        runCountdown('work', workSec, s, r + 1, () => advance(s, r + 1));
       });
-    } else if (set < sets) {
-      // end of set
+    } else if (s < sets) {
       beep(getAudioCtx(), 330, 0.3);
-      if (setBetweenSec > 0) {
-        startTimer('set-rest', setBetweenSec, () => {
-          beep(getAudioCtx(), 880, 0.2);
-          setCurrentSet(set + 1);
-          setCurrentRep(1);
-          startTimer('work', workSec, () => advance(set + 1, 1));
-        });
-      } else {
-        setCurrentSet(set + 1);
-        setCurrentRep(1);
-        startTimer('work', workSec, () => advance(set + 1, 1));
-      }
+      const next = () => { beep(getAudioCtx(), 880, 0.2); runCountdown('work', workSec, s + 1, 1, () => advance(s + 1, 1)); };
+      if (setBetweenSec > 0) runCountdown('set-rest', setBetweenSec, s, r, next);
+      else next();
     } else {
-      // done
       beep(getAudioCtx(), 220, 0.5);
-      beep(getAudioCtx(), 440, 0.4);
-      setPhase('done');
+      setTimeout(() => beep(getAudioCtx(), 440, 0.4), 200);
+      setPhase('done'); clearTimerSession();
     }
-  }, [proto, startTimer]);
+  }, [runCountdown]);
 
   const start = () => {
     if (!proto) return;
-    beep(getAudioCtx(), 880, 0.2);
-    setCurrentSet(1);
-    setCurrentRep(1);
-    startTimer('work', proto.workSec, () => advance(1, 1));
+    runCountdown('get-ready', 3, 1, 1, () => {
+      beep(getAudioCtx(), 880, 0.2);
+      runCountdown('work', proto.workSec, 1, 1, () => advance(1, 1));
+    });
+  };
+
+  const resume = () => {
+    if (!phase || phase === 'done') return;
+    const p = protoRef.current;
+    if (!p) return;
+    setIsPaused(false);
+    // Reconstruct what happens when the current phase ends
+    const s = setNumRef.current, r = repRef.current;
+    const tl = tlRef.current;
+    const onEnd = () => {
+      if (phaseRef.current === 'work') advance(s, r);
+      else if (phaseRef.current === 'rest') { beep(getAudioCtx(), 880, 0.2); runCountdown('work', p.workSec, s, r + 1, () => advance(s, r + 1)); }
+      else if (phaseRef.current === 'set-rest') { beep(getAudioCtx(), 880, 0.2); runCountdown('work', p.workSec, s + 1, 1, () => advance(s + 1, 1)); }
+    };
+    persist(phase, tl, s, r, false);
+    let remaining = tl;
+    intervalRef.current = setInterval(() => {
+      remaining -= 1;
+      setTimeLeft(remaining); tlRef.current = remaining;
+      persist(phaseRef.current, remaining, setNumRef.current, repRef.current, false);
+      if (remaining > 0 && remaining <= 3) beep(getAudioCtx(), 660, 0.08);
+      if (remaining <= 0) { clearInterval(intervalRef.current); onEnd(); }
+    }, 1000);
   };
 
   useEffect(() => () => clearInterval(intervalRef.current), []);
 
-  const phaseColors = { work: '#10b981', rest: '#f59e0b', 'set-rest': '#3b82f6', done: '#8b5cf6' };
-  const phaseLabels = { work: 'HANG', rest: 'REST', 'set-rest': 'SET REST', done: 'DONE' };
+  const phaseColors = { 'get-ready': '#f97316', work: '#10b981', rest: '#f59e0b', 'set-rest': '#3b82f6', done: '#8b5cf6' };
+  const phaseLabels = { 'get-ready': 'GET READY', work: 'HANG', rest: 'REST', 'set-rest': 'SET REST', done: 'DONE' };
+  const isActive = !!phase && phase !== 'done';
 
   const saveEdit = () => {
     const updated = protocols.map(p => p.id === editProto.id ? editProto : p);
-    setProtocols(updated);
-    saveProtocols(updated);
-    setEditing(false);
+    setProtocols(updated); saveProtocols(updated); setEditing(false);
   };
 
   const addProtocol = () => {
     const np = { id: `custom-${Date.now()}`, name: 'Custom', sets: 5, reps: 6, workSec: 7, restSec: 3, setBetweenSec: 120 };
     const updated = [...protocols, np];
-    setProtocols(updated);
-    saveProtocols(updated);
-    setSelectedId(np.id);
-    setEditProto({ ...np });
-    setEditing(true);
+    setProtocols(updated); saveProtocols(updated);
+    setSelectedId(np.id); setEditProto({ ...np }); setEditing(true);
   };
 
   const deleteProtocol = (id) => {
+    if (DEFAULT_PROTOCOLS.find(d => d.id === id)) return; // don't delete defaults
     const updated = protocols.filter(p => p.id !== id);
-    setProtocols(updated);
-    saveProtocols(updated);
+    setProtocols(updated); saveProtocols(updated);
     if (selectedId === id) setSelectedId(updated[0]?.id ?? null);
   };
 
@@ -2642,18 +2719,17 @@ function IntervalTimer() {
           {protocols.map(p => (
             <div
               key={p.id}
-              style={{ ...styles.protoItem, ...(p.id === selectedId ? styles.protoItemActive : {}) }}
-              onClick={() => { setSelectedId(p.id); stop(); }}
+              style={{ ...styles.protoItem, ...(p.id === selectedId ? styles.protoItemActive : {}), opacity: isActive && p.id !== selectedId ? 0.4 : 1 }}
+              onClick={() => { if (!isActive) setSelectedId(p.id); }}
             >
               <div style={styles.protoItemName}>{p.name}</div>
               <div style={styles.protoItemMeta}>
-                {p.sets}s × {p.reps}r · {p.workSec}/{p.restSec}s
-                {p.setBetweenSec > 0 ? ` · ${p.setBetweenSec}s between` : ''}
+                {p.sets}s × {p.reps}r · {p.workSec}/{p.restSec}s · {p.setBetweenSec}s between
               </div>
             </div>
           ))}
         </div>
-        {proto && (
+        {proto && !isActive && (
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button style={{ ...styles.btnSmall, flex: 1 }} onClick={() => { setEditProto({ ...proto }); setEditing(true); }}>Edit</button>
             {!DEFAULT_PROTOCOLS.find(d => d.id === proto.id) && (
@@ -2702,13 +2778,14 @@ function IntervalTimer() {
           <div style={styles.timerDisplay}>
             {phase ? (
               <>
-                <div style={{ ...styles.timerPhase, color: phaseColors[phase] || '#fff' }}>
+                <div style={{ ...styles.timerPhase, color: isPaused ? '#6b7280' : (phaseColors[phase] || '#fff') }}>
                   {phaseLabels[phase] ?? phase.toUpperCase()}
+                  {isPaused && <span style={{ marginLeft: 8, fontSize: 10 }}>· PAUSED</span>}
                 </div>
-                <div style={{ ...styles.timerCountdown, color: phaseColors[phase] || '#fff' }}>
+                <div style={{ ...styles.timerCountdown, color: isPaused ? '#374151' : (phaseColors[phase] || '#fff') }}>
                   {phase === 'done' ? '✓' : timeLeft}
                 </div>
-                {phase !== 'done' && (
+                {isActive && phase !== 'get-ready' && (
                   <div style={styles.timerProgress}>
                     Set {currentSet}/{proto.sets} · Rep {currentRep}/{proto.reps}
                   </div>
@@ -2718,18 +2795,27 @@ function IntervalTimer() {
               <>
                 <div style={styles.timerIdleLabel}>{proto.name}</div>
                 <div style={styles.timerIdleMeta}>
-                  {proto.sets} sets × {proto.reps} reps · {proto.workSec}s on / {proto.restSec}s off
-                  {proto.setBetweenSec > 0 ? ` · ${proto.setBetweenSec}s between sets` : ''}
+                  {proto.sets} sets × {proto.reps} reps · {proto.workSec}s on / {proto.restSec}s off · {proto.setBetweenSec}s between sets
                 </div>
               </>
             )}
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>
-            {!phase ? (
+            {!phase && (
               <button style={{ ...styles.btnPrimary, flex: 1, fontSize: 18 }} onClick={start}>Start</button>
-            ) : (
+            )}
+            {isActive && !isPaused && (
+              <button style={{ ...styles.btnSecondary, flex: 1 }} onClick={pause}>Pause</button>
+            )}
+            {isActive && isPaused && (
+              <button style={{ ...styles.btnPrimary, flex: 1 }} onClick={resume}>Resume</button>
+            )}
+            {isActive && (
               <button style={{ ...styles.btnDanger, flex: 1 }} onClick={stop}>Stop</button>
+            )}
+            {phase === 'done' && (
+              <button style={{ ...styles.btnSecondary, flex: 1 }} onClick={stop}>Done</button>
             )}
           </div>
         </div>
@@ -3186,6 +3272,7 @@ const styles = {
   quickPickRow: { display: 'flex', gap: 6, marginTop: 10 },
   quickPickBtn: { flex: 1, padding: '8px 0', border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' },
   loggedBadge: { display: 'inline-block', background: '#064e3b', color: '#10b981', padding: '1px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', marginLeft: 6 },
+  backBtn: { display: 'flex', alignItems: 'center', gap: 4, background: '#1f2937', border: 'none', color: '#9ca3af', padding: '6px 10px', borderRadius: 6, fontSize: 13, fontWeight: 600, flexShrink: 0 },
 
   // S&C workout detail expand
   scSectionHeading: { fontFamily: '"JetBrains Mono", monospace', fontSize: 10, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 },

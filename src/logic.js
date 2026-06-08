@@ -61,17 +61,20 @@ export function calcPlannedLoad(session, phaseKey, day, weekProg, blockIntensity
 //   chronic = mean of all weekly buckets INCLUDING acute
 //   ratio  = acute / chronic
 
+function localDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d); // local midnight — avoids UTC timezone shift
+}
+
 export function calcACWR(sessions) {
   const now = new Date();
   const DAY = 24 * 60 * 60 * 1000;
 
-  // Bucket sessions into week slots (0 = most recent 7 days)
-  const weekBuckets = [0, 0, 0, 0]; // weeks 0–3
+  const weekBuckets = [0, 0, 0, 0];
   const weekHasData = [false, false, false, false];
 
   Object.entries(sessions).forEach(([k, s]) => {
-    const d = new Date(k);
-    const diff = (now - d) / DAY;
+    const diff = (now - localDate(k)) / DAY;
     if (diff < 0 || diff >= 28) return;
     const load = calcLoggedLoad(s);
     if (load <= 0) return;
@@ -80,18 +83,10 @@ export function calcACWR(sessions) {
     weekHasData[slot] = true;
   });
 
-  // Extrapolate week 0 (acute) if we're not at a full 7-day boundary
-  // daysSinceStart tells us how many days of data exist in bucket 0
-  const daysInAcute = Math.min(7, (() => {
-    const allDates = Object.keys(sessions).map(k => new Date(k));
-    if (!allDates.length) return 7;
-    const earliest = new Date(Math.min(...allDates));
-    const daysTotal = Math.floor((now - earliest) / DAY) + 1;
-    return Math.min(7, daysTotal);
-  })());
-  const acuteExtrapolated = daysInAcute < 7
-    ? (weekBuckets[0] / daysInAcute) * 7
-    : weekBuckets[0];
+  // Don't extrapolate — use the raw acute bucket.
+  // Extrapolation would inflate chronic when the current week is partial,
+  // which is misleading. Ratio < 1 on a rest day is correct and expected.
+  const acuteExtrapolated = weekBuckets[0];
 
   // Chronic = mean of all available weekly buckets, acute extrapolated included
   const availableSlots = weekHasData.reduce((count, has, i) => {
@@ -213,7 +208,7 @@ const PRESEED_DAY_LOADS = {
   ], rpe: 5 },
 };
 
-const WEEK_VOLUME_MULTS = [1.0, 1.1, 1.2, 0.7]; // capacity phase weeks 1-4
+const WEEK_VOLUME_MULTS = [1.0, 1.0, 1.0, 1.0]; // flat — preseed is just ACWR baseline, not a training block simulation
 
 export function generatePreseededSessions(anchorDate) {
   const sessions = {};
