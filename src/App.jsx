@@ -530,6 +530,30 @@ const DAYS_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const todayKey = () => localDateKey();
 const dayOfWeek = (date) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
 
+// Returns the 7 YYYY-MM-DD keys for the Mon–Sun week containing dateKey
+function weekDateKeys(dateKey) {
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  const date = new Date(y, mo - 1, d);
+  const dow = date.getDay(); // 0=Sun
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + toMonday);
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + i);
+    return localDateKey(day);
+  });
+}
+
+// Returns Set of block names logged on any day in the same week as dateKey
+function weekLoggedBlockNames(sessions, dateKey) {
+  const names = new Set();
+  weekDateKeys(dateKey).forEach(k => {
+    (sessions[k]?.blocks ?? []).forEach(b => names.add(b.name));
+  });
+  return names;
+}
+
 function getBlockIntensity(block, phaseKey, day) {
   const key = `${block.name}|${phaseKey}|${day}`;
   if (BLOCK_INTENSITY[key]) return BLOCK_INTENSITY[key];
@@ -1035,6 +1059,7 @@ function ProtocolExpanded({ protocol }) {
 // ============================================================
 
 function WeekView({ phase, phaseKey, weekProg, currentWeek, sessions, onSelectDay }) {
+  const doneBlocks = weekLoggedBlockNames(sessions, todayKey());
   return (
     <div>
       <h1 style={styles.h1}>{phase.name}</h1>
@@ -1084,13 +1109,20 @@ function WeekView({ phase, phaseKey, weekProg, currentWeek, sessions, onSelectDa
                 {climbingType ? climbingType.name : 'Recovery'}
               </div>
               <div style={styles.miniBlocks}>
-                {s.blocks.filter(b => b.type !== 'warmup' && b.type !== 'cooldown').map((b, i) => (
-                  <div
-                    key={i}
-                    style={{ ...styles.miniBlock, background: TYPE_COLORS[b.type] }}
-                    title={b.name}
-                  />
-                ))}
+                {s.blocks.filter(b => b.type !== 'warmup' && b.type !== 'cooldown').map((b, i) => {
+                  const doneElsewhere = b.type === 'sc' && doneBlocks.has(b.name);
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        ...styles.miniBlock,
+                        background: doneElsewhere ? '#1f2937' : TYPE_COLORS[b.type],
+                        outline: doneElsewhere ? '1.5px solid #10b981' : 'none',
+                      }}
+                      title={doneElsewhere ? `${b.name} ✓ done this week` : b.name}
+                    />
+                  );
+                })}
               </div>
               <div style={styles.weekDayChevron}>
                 <ChevronRight size={14} />
@@ -1253,6 +1285,35 @@ function LogView({ sessions, onUpdate, phase, phaseKey, weekProg, initialDate, o
     setForm({ ...form, blocks: [...form.blocks, { ...defaults[type], plannedMin: 0, planned: false }] });
   };
 
+  const addWeeklyBlock = (b) => {
+    const block = {
+      name: b.name,
+      type: b.type,
+      intensity: getBlockIntensity(b, phaseKey, b.planDay),
+      plannedMin: Math.round(b.time * (weekProg?.volumeMult ?? 1)),
+      actualMin: Math.round(b.time * (weekProg?.volumeMult ?? 1)),
+      planned: false,
+    };
+    setForm(f => ({ ...f, blocks: [...(f?.blocks ?? []), block] }));
+  };
+
+  // S&C blocks from other days this week not yet in the form or logged anywhere this week
+  const loggedThisWeek = weekLoggedBlockNames(sessions, selectedDate);
+  const formBlockNames = new Set((form?.blocks ?? []).map(b => b.name));
+  const availableWeeklyBlocks = [];
+  DAYS_ORDER.forEach(planDay => {
+    if (planDay === day) return;
+    const planSession = phase.sessions[planDay];
+    if (!planSession) return;
+    planSession.blocks.forEach(b => {
+      if (b.type !== 'sc') return;
+      if (formBlockNames.has(b.name)) return;
+      if (loggedThisWeek.has(b.name)) return;
+      if (availableWeeklyBlocks.some(x => x.name === b.name)) return;
+      availableWeeklyBlocks.push({ ...b, planDay });
+    });
+  });
+
   const computeLoad = () => {
     if (!form) return 0;
     let total = 0;
@@ -1386,6 +1447,25 @@ function LogView({ sessions, onUpdate, phase, phaseKey, weekProg, initialDate, o
             No planned blocks for this day. Add what you did:
           </p>
           <AddBlockCluster onAdd={addBlock} />
+        </div>
+      )}
+
+      {/* Weekly S&C blocks available to borrow */}
+      {availableWeeklyBlocks.length > 0 && (
+        <div style={styles.card}>
+          <label style={styles.label}>Also doing from this week?</label>
+          <p style={styles.helperText}>
+            S&C blocks scheduled on other days — tap to add to today. They'll count as done for the week.
+          </p>
+          <div style={styles.weeklyBlockPicker}>
+            {availableWeeklyBlocks.map((b, i) => (
+              <button key={i} style={styles.weeklyBlockChip} onClick={() => addWeeklyBlock(b)}>
+                <Plus size={13} />
+                <span>{b.name}</span>
+                <span style={styles.weeklyBlockDay}>{b.planDay}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -3247,6 +3327,10 @@ const styles = {
   addBlockCluster: { marginTop: 8 },
   addBlockButtons: { display: 'flex', flexWrap: 'wrap', gap: 6 },
   addBlockBtn: { display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px dashed', borderRadius: 6, padding: '6px 12px', color: '#d1d5db', fontSize: 12, fontWeight: 600 },
+
+  weeklyBlockPicker: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  weeklyBlockChip: { display: 'inline-flex', alignItems: 'center', gap: 6, background: '#1f2937', border: '1px solid #3b82f6', borderRadius: 20, padding: '6px 12px', color: '#93c5fd', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  weeklyBlockDay: { fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#111827', borderRadius: 10, padding: '2px 6px', marginLeft: 2 },
 
   // Import UI
   importDivider: { borderTop: '1px solid #1f2937', marginTop: 8 },

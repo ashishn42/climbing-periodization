@@ -9,6 +9,29 @@ import {
   localDateKey,
 } from '../logic.js';
 
+// weekDateKeys and weekLoggedBlockNames are in App.jsx (not pure logic), so we inline them here for testing
+function weekDateKeys(dateKey) {
+  const [y, mo, d] = dateKey.split('-').map(Number);
+  const date = new Date(y, mo - 1, d);
+  const dow = date.getDay();
+  const toMonday = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + toMonday);
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + i);
+    return localDateKey(day);
+  });
+}
+
+function weekLoggedBlockNames(sessions, dateKey) {
+  const names = new Set();
+  weekDateKeys(dateKey).forEach(k => {
+    (sessions[k]?.blocks ?? []).forEach(b => names.add(b.name));
+  });
+  return names;
+}
+
 // ─── Load calc ────────────────────────────────────────────────────────────────
 
 describe('calcLoggedLoad', () => {
@@ -256,5 +279,62 @@ describe('localDateKey', () => {
     const now = new Date();
     const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     expect(localDateKey()).toBe(expected);
+  });
+});
+
+// ─── weekDateKeys ─────────────────────────────────────────────────────────────
+
+describe('weekDateKeys', () => {
+  it('returns 7 keys starting on Monday', () => {
+    const keys = weekDateKeys('2025-06-11'); // Wednesday
+    expect(keys).toHaveLength(7);
+    expect(keys[0]).toBe('2025-06-09'); // Monday
+    expect(keys[6]).toBe('2025-06-15'); // Sunday
+  });
+
+  it('Sunday returns its own week (Mon before it)', () => {
+    const keys = weekDateKeys('2025-06-15'); // Sunday
+    expect(keys[0]).toBe('2025-06-09');
+    expect(keys[6]).toBe('2025-06-15');
+  });
+
+  it('Monday is the first key', () => {
+    const keys = weekDateKeys('2025-06-09'); // Monday
+    expect(keys[0]).toBe('2025-06-09');
+  });
+});
+
+// ─── weekLoggedBlockNames ─────────────────────────────────────────────────────
+
+describe('weekLoggedBlockNames', () => {
+  it('returns empty set when no sessions', () => {
+    expect(weekLoggedBlockNames({}, '2025-06-11').size).toBe(0);
+  });
+
+  it('finds block logged on a different day in the same week', () => {
+    const sessions = {
+      '2025-06-10': { blocks: [{ name: 'Legs', type: 'sc' }] }, // Tuesday
+    };
+    const result = weekLoggedBlockNames(sessions, '2025-06-15'); // Sunday same week
+    expect(result.has('Legs')).toBe(true);
+  });
+
+  it('does not find block from a different week', () => {
+    const sessions = {
+      '2025-06-02': { blocks: [{ name: 'Legs', type: 'sc' }] }, // previous week
+    };
+    const result = weekLoggedBlockNames(sessions, '2025-06-11');
+    expect(result.has('Legs')).toBe(false);
+  });
+
+  it('collects all block names from all days in the week', () => {
+    const sessions = {
+      '2025-06-10': { blocks: [{ name: 'Legs', type: 'sc' }, { name: 'Push + Pull', type: 'sc' }] },
+      '2025-06-12': { blocks: [{ name: 'Shoulder', type: 'sc' }] },
+    };
+    const result = weekLoggedBlockNames(sessions, '2025-06-11');
+    expect(result.has('Legs')).toBe(true);
+    expect(result.has('Push + Pull')).toBe(true);
+    expect(result.has('Shoulder')).toBe(true);
   });
 });
