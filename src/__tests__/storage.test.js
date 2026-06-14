@@ -65,3 +65,66 @@ describe('storage data integrity', () => {
     });
   });
 });
+
+// ─── Timer session restore (endAt-based) ──────────────────────────────────────
+
+// Mirrors the restoreTimerSession logic from App.jsx
+function restoreTimerSession() {
+  const TIMER_KEY = 'timerSession';
+  try {
+    const raw = localStorage.getItem(TIMER_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s.phase || s.phase === 'done') return null;
+    if (s.isPaused) return s;
+    const remaining = s.endAt
+      ? Math.max(0, Math.ceil((s.endAt - Date.now()) / 1000))
+      : Math.max(0, s.timeLeft - Math.floor((Date.now() - (s.savedAt ?? Date.now())) / 1000));
+    if (remaining <= 0) { localStorage.removeItem(TIMER_KEY); return null; }
+    return { ...s, timeLeft: remaining, isPaused: true };
+  } catch (e) { return null; }
+}
+
+describe('restoreTimerSession', () => {
+  const KEY = 'timerSession';
+  beforeEach(() => localStorage.removeItem(KEY));
+
+  it('returns null when no session saved', () => {
+    expect(restoreTimerSession()).toBeNull();
+  });
+
+  it('returns null for done phase', () => {
+    localStorage.setItem(KEY, JSON.stringify({ phase: 'done', timeLeft: 0 }));
+    expect(restoreTimerSession()).toBeNull();
+  });
+
+  it('returns paused session as-is', () => {
+    const s = { phase: 'work', timeLeft: 5, set: 1, rep: 2, isPaused: true };
+    localStorage.setItem(KEY, JSON.stringify(s));
+    expect(restoreTimerSession()).toEqual(s);
+  });
+
+  it('calculates remaining from endAt and restores as paused', () => {
+    const endAt = Date.now() + 7000; // 7 seconds from now
+    localStorage.setItem(KEY, JSON.stringify({ phase: 'work', timeLeft: 99, set: 1, rep: 1, isPaused: false, endAt }));
+    const result = restoreTimerSession();
+    expect(result.isPaused).toBe(true);
+    expect(result.timeLeft).toBeGreaterThanOrEqual(6);
+    expect(result.timeLeft).toBeLessThanOrEqual(7);
+  });
+
+  it('returns null when endAt is already past', () => {
+    const endAt = Date.now() - 5000; // 5 seconds ago
+    localStorage.setItem(KEY, JSON.stringify({ phase: 'work', timeLeft: 5, set: 1, rep: 1, isPaused: false, endAt }));
+    expect(restoreTimerSession()).toBeNull();
+  });
+
+  it('falls back to savedAt+timeLeft when endAt missing', () => {
+    const savedAt = Date.now() - 3000; // saved 3 seconds ago with 10s left
+    localStorage.setItem(KEY, JSON.stringify({ phase: 'rest', timeLeft: 10, set: 1, rep: 1, isPaused: false, savedAt }));
+    const result = restoreTimerSession();
+    expect(result.isPaused).toBe(true);
+    expect(result.timeLeft).toBeGreaterThanOrEqual(6);
+    expect(result.timeLeft).toBeLessThanOrEqual(7);
+  });
+});

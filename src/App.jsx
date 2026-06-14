@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Calendar, Activity, TrendingUp, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft, Plus, Minus, Save, RotateCcw, Plane, X, ChevronDown, Trash2, Info, Timer, Hash } from 'lucide-react';
-import { calcLoggedLoad, calcACWR, getCurrentWeek, runMigrations, generatePreseededSessions } from './logic.js';
+import { calcLoggedLoad, calcACWR, getCurrentWeek, runMigrations, generatePreseededSessions, localDateKey } from './logic.js';
 import { SC_WORKOUTS } from './sc-workouts.js';
 
 // ============================================================
@@ -527,7 +527,7 @@ const DAYS_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 // HELPERS
 // ============================================================
 
-const todayKey = () => new Date().toISOString().split('T')[0];
+const todayKey = () => localDateKey();
 const dayOfWeek = (date) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
 
 function getBlockIntensity(block, phaseKey, day) {
@@ -1289,7 +1289,7 @@ function LogView({ sessions, onUpdate, phase, phaseKey, weekProg, initialDate, o
   for (let offset = 0; offset <= 3; offset++) {
     const dt = new Date();
     dt.setDate(dt.getDate() - offset);
-    const k = dt.toISOString().split('T')[0];
+    const k = localDateKey(dt);
     const label = offset === 0 ? 'Today' : offset === 1 ? 'Yesterday' : dt.toLocaleDateString('en-US', { weekday: 'short' });
     quickPickDates.push({ key: k, label });
   }
@@ -2500,7 +2500,7 @@ function saveProtocols(protocols) {
 const TIMER_KEY = 'timerSession';
 
 function saveTimerSession(s) {
-  localStorage.setItem(TIMER_KEY, JSON.stringify({ ...s, savedAt: Date.now() }));
+  localStorage.setItem(TIMER_KEY, JSON.stringify(s));
 }
 
 function clearTimerSession() {
@@ -2513,10 +2513,11 @@ function restoreTimerSession() {
     if (!raw) return null;
     const s = JSON.parse(raw);
     if (!s.phase || s.phase === 'done') return null;
-    if (s.isPaused) return s; // paused — restore exactly
-    // Was running when app closed — subtract elapsed, restore as paused
-    const elapsed = Math.floor((Date.now() - s.savedAt) / 1000);
-    const remaining = s.timeLeft - elapsed;
+    if (s.isPaused) return s;
+    // Was running — derive remaining from absolute endAt timestamp
+    const remaining = s.endAt
+      ? Math.max(0, Math.ceil((s.endAt - Date.now()) / 1000))
+      : Math.max(0, s.timeLeft - Math.floor((Date.now() - (s.savedAt ?? Date.now())) / 1000));
     if (remaining <= 0) { clearTimerSession(); return null; }
     return { ...s, timeLeft: remaining, isPaused: true };
   } catch (e) { return null; }
@@ -2583,6 +2584,12 @@ function IntervalTimer() {
   const repRef = useRef(currentRep);
   const protoRef = useRef(null);
   const selectedIdRef = useRef(selectedId);
+  // Timestamp-based countdown: stores absolute end time of current phase
+  const endAtRef = useRef(0);
+  // Stored onEnd callback so visibilitychange handler can advance phases
+  const onEndRef = useRef(null);
+  const isPausedRef = useRef(restored?.isPaused ?? false);
+  const wakeLockRef = useRef(null);
 
   const proto = protocols.find(p => p.id === selectedId) ?? protocols[0];
   protoRef.current = proto;
@@ -2599,41 +2606,62 @@ function IntervalTimer() {
     return audioCtxRef.current;
   };
 
+  const acquireWakeLock = async () => {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request('screen');
+    } catch (_) { /* denied or not supported */ }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null; }
+  };
+
   const persist = (p, tl, s, r, paused) => {
     if (!p || p === 'done') { clearTimerSession(); return; }
-    saveTimerSession({ phase: p, timeLeft: tl, set: s, rep: r, isPaused: paused, protocolId: selectedIdRef.current });
+    saveTimerSession({ phase: p, timeLeft: tl, set: s, rep: r, isPaused: paused, protocolId: selectedIdRef.current, endAt: endAtRef.current });
   };
 
   const stop = useCallback(() => {
     clearInterval(intervalRef.current);
+    releaseWakeLock();
+    isPausedRef.current = true;
     setPhase(null); setTimeLeft(0); setCurrentSet(1); setCurrentRep(1); setIsPaused(false);
     clearTimerSession();
   }, []);
 
   const pause = () => {
     clearInterval(intervalRef.current);
+    releaseWakeLock();
+    isPausedRef.current = true;
     setIsPaused(true);
     persist(phaseRef.current, tlRef.current, setNumRef.current, repRef.current, true);
   };
 
+  // Shared tick — uses endAtRef so it's immune to interval throttling on screen lock
+  const startInterval = useCallback(() => {
+    clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      const rem = Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000));
+      setTimeLeft(rem); tlRef.current = rem;
+      persist(phaseRef.current, rem, setNumRef.current, repRef.current, false);
+      if (rem > 0 && rem <= 3 && audioCtxRef.current) beep(audioCtxRef.current, 660, 0.08);
+      if (rem <= 0) { clearInterval(intervalRef.current); onEndRef.current?.(); }
+    }, 500);
+  }, []);
+
   // Run a countdown interval for a given phase, calling onEnd when it reaches 0
   const runCountdown = useCallback((phaseName, seconds, s, r, onEnd) => {
-    clearInterval(intervalRef.current);
+    endAtRef.current = Date.now() + seconds * 1000;
+    onEndRef.current = onEnd;
     setPhase(phaseName); phaseRef.current = phaseName;
     setCurrentSet(s); setNumRef.current = s;
     setCurrentRep(r); repRef.current = r;
     setTimeLeft(seconds); tlRef.current = seconds;
-    setIsPaused(false);
+    setIsPaused(false); isPausedRef.current = false;
     persist(phaseName, seconds, s, r, false);
-    let remaining = seconds;
-    intervalRef.current = setInterval(() => {
-      remaining -= 1;
-      setTimeLeft(remaining); tlRef.current = remaining;
-      persist(phaseRef.current, remaining, setNumRef.current, repRef.current, false);
-      if (remaining > 0 && remaining <= 3) beep(getAudioCtx(), 660, 0.08);
-      if (remaining <= 0) { clearInterval(intervalRef.current); onEnd(); }
-    }, 1000);
-  }, []);
+    startInterval();
+  }, [startInterval]);
 
   const advance = useCallback((s, r) => {
     const p = protoRef.current;
@@ -2653,12 +2681,14 @@ function IntervalTimer() {
     } else {
       beep(getAudioCtx(), 220, 0.5);
       setTimeout(() => beep(getAudioCtx(), 440, 0.4), 200);
+      releaseWakeLock();
       setPhase('done'); clearTimerSession();
     }
   }, [runCountdown]);
 
   const start = () => {
     if (!proto) return;
+    acquireWakeLock();
     runCountdown('get-ready', 3, 1, 1, () => {
       beep(getAudioCtx(), 880, 0.2);
       runCountdown('work', proto.workSec, 1, 1, () => advance(1, 1));
@@ -2669,27 +2699,41 @@ function IntervalTimer() {
     if (!phase || phase === 'done') return;
     const p = protoRef.current;
     if (!p) return;
-    setIsPaused(false);
-    // Reconstruct what happens when the current phase ends
+    setIsPaused(false); isPausedRef.current = false;
+    acquireWakeLock();
+    // Rebuild endAt from current remaining so timestamp-based tick is correct
+    endAtRef.current = Date.now() + tlRef.current * 1000;
     const s = setNumRef.current, r = repRef.current;
-    const tl = tlRef.current;
-    const onEnd = () => {
+    onEndRef.current = () => {
       if (phaseRef.current === 'work') advance(s, r);
       else if (phaseRef.current === 'rest') { beep(getAudioCtx(), 880, 0.2); runCountdown('work', p.workSec, s, r + 1, () => advance(s, r + 1)); }
       else if (phaseRef.current === 'set-rest') { beep(getAudioCtx(), 880, 0.2); runCountdown('work', p.workSec, s + 1, 1, () => advance(s + 1, 1)); }
     };
-    persist(phase, tl, s, r, false);
-    let remaining = tl;
-    intervalRef.current = setInterval(() => {
-      remaining -= 1;
-      setTimeLeft(remaining); tlRef.current = remaining;
-      persist(phaseRef.current, remaining, setNumRef.current, repRef.current, false);
-      if (remaining > 0 && remaining <= 3) beep(getAudioCtx(), 660, 0.08);
-      if (remaining <= 0) { clearInterval(intervalRef.current); onEnd(); }
-    }, 1000);
+    persist(phase, tlRef.current, s, r, false);
+    startInterval();
   };
 
-  useEffect(() => () => clearInterval(intervalRef.current), []);
+  // When screen unlocks / tab refocuses, resync timer from the absolute endAt timestamp
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!phaseRef.current || phaseRef.current === 'done') return;
+      if (isPausedRef.current) return;
+      acquireWakeLock(); // wake lock is released on screen lock; re-acquire
+      const rem = Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000));
+      clearInterval(intervalRef.current);
+      if (rem <= 0) {
+        onEndRef.current?.();
+      } else {
+        setTimeLeft(rem); tlRef.current = rem;
+        startInterval();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [startInterval]);
+
+  useEffect(() => () => { clearInterval(intervalRef.current); releaseWakeLock(); }, []);
 
   const phaseColors = { 'get-ready': '#f97316', work: '#10b981', rest: '#f59e0b', 'set-rest': '#3b82f6', done: '#8b5cf6' };
   const phaseLabels = { 'get-ready': 'GET READY', work: 'HANG', rest: 'REST', 'set-rest': 'SET REST', done: 'DONE' };

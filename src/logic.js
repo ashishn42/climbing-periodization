@@ -66,6 +66,11 @@ function localDate(dateStr) {
   return new Date(y, m - 1, d); // local midnight — avoids UTC timezone shift
 }
 
+// Returns YYYY-MM-DD in the device's local timezone (not UTC)
+export function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export function calcACWR(sessions) {
   const now = new Date();
   const DAY = 24 * 60 * 60 * 1000;

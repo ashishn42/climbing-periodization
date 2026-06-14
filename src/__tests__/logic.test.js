@@ -6,6 +6,7 @@ import {
   validateFingerLog,
   LOAD_WEIGHTS,
   getCurrentWeek,
+  localDateKey,
 } from '../logic.js';
 
 // ─── Load calc ────────────────────────────────────────────────────────────────
@@ -229,5 +230,31 @@ describe('getCurrentWeek', () => {
     const d = new Date();
     d.setDate(d.getDate() - 100);
     expect(getCurrentWeek(d.toISOString().split('T')[0], 4)).toBe(4);
+  });
+});
+
+// ─── localDateKey ─────────────────────────────────────────────────────────────
+
+describe('localDateKey', () => {
+  it('returns YYYY-MM-DD in local timezone', () => {
+    const d = new Date(2025, 0, 5); // Jan 5 2025 local midnight
+    expect(localDateKey(d)).toBe('2025-01-05');
+  });
+
+  it('zero-pads month and day', () => {
+    expect(localDateKey(new Date(2025, 8, 3))).toBe('2025-09-03'); // Sep 3
+  });
+
+  it('does not drift to next day due to UTC offset', () => {
+    // Simulate a date that is e.g. Dec 31 local but Jan 1 in UTC
+    // new Date(2025, 11, 31, 23, 0) = Dec 31 at 11pm local
+    const d = new Date(2025, 11, 31, 23, 0, 0);
+    expect(localDateKey(d)).toBe('2025-12-31');
+  });
+
+  it('defaults to today', () => {
+    const now = new Date();
+    const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    expect(localDateKey()).toBe(expected);
   });
 });
