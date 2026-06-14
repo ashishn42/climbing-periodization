@@ -154,12 +154,12 @@ export const SC_WORKOUTS = {
       {
         heading: 'Strength Block',
         items: [
-          'A1 — Bulgarian split squat — rear foot elevated on bench, front foot far enough forward that shin stays vertical at bottom; lower back knee toward floor, drive through front heel to stand; single-leg strength and hip stability · 4 × 8/leg · rest 30s → A2',
-          'A2 — Single-leg RDL — stand on one leg, slight knee bend; hinge at hip sending torso forward and free leg behind, lower weight toward floor keeping spine neutral; feel hamstring load then drive hip forward to return · 4 × 8/leg · rest 90s → A1',
-          'B1 — Copenhagen plank — side plank with top foot resting on a chair or bench; hold body in a rigid straight line from head to heel; adductor and lateral core anti-collapse hold · 3 × 20s/side · rest 30s → B2',
-          'B2 — Tibialis raises — stand with heels on a step or heels against a wall, toes raised; lower toes toward the floor then dorsiflex (pull up) against gravity; strengthens tibialis anterior and protects knees · 3 × 15 · rest 90s → B1',
-          'C1 — Single-leg calf raise (standing) — stand on one foot on edge of step with heel hanging off; lower heel below step level then rise up on toes as high as possible; full ankle range of motion — 3 × 15/leg · rest 60s',
-          'C2 — Seated calf raise — seated with knees at 90° and weight resting on lower thighs; raise heels as high as possible then lower slowly; seated position isolates soleus rather than gastrocnemius — 3 × 20 · rest 60s',
+          'A1 · Bulgarian split squat — rear foot elevated on bench, front foot far enough forward that shin stays vertical at bottom; lower back knee toward floor, drive through front heel to stand; single-leg strength and hip stability — 4 × 8/leg · rest 30s → A2',
+          'A2 · Single-leg RDL — stand on one leg with slight knee bend; hinge at hip sending torso forward and free leg behind, lower weight toward floor keeping spine neutral; feel hamstring load then drive hip forward to return — 4 × 8/leg · rest 90s → A1',
+          'B1 · Copenhagen plank — side plank with top foot resting on a chair or bench; hold body in a rigid straight line from head to heel; adductor and lateral core anti-collapse hold — 3 × 20s/side · rest 30s → B2',
+          'B2 · Tibialis raises — stand with heels on a step or against a wall, toes raised; lower toes toward the floor then dorsiflex (pull up) against gravity; strengthens tibialis anterior and protects knees — 3 × 15 · rest 90s → B1',
+          'C1 · Single-leg calf raise (standing) — stand on one foot on edge of step with heel hanging off; lower heel below step level then rise up on toes as high as possible; full ankle range of motion — 3 × 15/leg · rest 60s',
+          'C2 · Seated calf raise — seated with knees at 90° and weight resting on lower thighs; raise heels as high as possible then lower slowly; seated position isolates soleus rather than gastrocnemius — 3 × 20 · rest 60s',
         ],
       },
       {
@@ -219,12 +219,12 @@ export const SC_WORKOUTS = {
       {
         heading: 'Strength Block',
         items: [
-          'A1 — Bulgarian split squat — rear foot elevated on bench, front foot far forward; lower back knee toward floor, drive through front heel; single-leg strength and hip stability · 4 × 8/leg · rest 30s → A2',
-          'A2 — Single-leg RDL — hinge at hip sending torso forward and free leg behind, lower weight toward floor with neutral spine; drive hip forward to return · 4 × 8/leg · rest 90s → A1',
-          'B1 — Copenhagen plank — side plank with top foot on bench; hold rigid straight line from head to heel; adductor and lateral core hold · 3 × 20s/side · rest 30s → B2',
-          'B2 — Tibialis raises — heels on step or against wall, toes raised; lower then pull toes back up against gravity; strengthens tibialis anterior · 3 × 15 · rest 90s → B1',
-          'C1 — Single-leg calf raise — one foot on step edge, heel hanging; lower heel below step then rise to toes; full ankle range — 3 × 15/leg · rest 60s',
-          'C2 — Seated calf raise — seated at 90°, weight on thighs; raise heels high then lower slowly; isolates soleus — 3 × 20 · rest 60s',
+          'A1 · Bulgarian split squat — rear foot elevated on bench, front foot far forward; lower back knee toward floor, drive through front heel; single-leg strength and hip stability — 4 × 8/leg · rest 30s → A2',
+          'A2 · Single-leg RDL — hinge at hip sending torso forward and free leg behind, lower weight toward floor with neutral spine; drive hip forward to return — 4 × 8/leg · rest 90s → A1',
+          'B1 · Copenhagen plank — side plank with top foot on bench; hold rigid straight line from head to heel; adductor and lateral core hold — 3 × 20s/side · rest 30s → B2',
+          'B2 · Tibialis raises — heels on step or against wall, toes raised; lower then pull toes back up against gravity; strengthens tibialis anterior — 3 × 15 · rest 90s → B1',
+          'C1 · Single-leg calf raise — one foot on step edge, heel hanging; lower heel below step then rise to toes; full ankle range — 3 × 15/leg · rest 60s',
+          'C2 · Seated calf raise — seated at 90°, weight on thighs; raise heels high then lower slowly; isolates soleus — 3 × 20 · rest 60s',
         ],
       },
       {
