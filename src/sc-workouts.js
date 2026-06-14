@@ -27,6 +27,7 @@ export const SC_WORKOUTS = {
         heading: 'Circuit 2 · 3–4 rounds',
         items: [
           'Band standing angel — hold band behind back with arms straight at sides; pull band apart horizontally like a back-of-body pull-apart, squeezing rear delts and scapular retractors — 8–12 reps',
+          'Lateral raises — stand with a light dumbbell in each hand at your sides; raise both arms straight out to the sides until they reach shoulder height, then lower slowly; do not shrug or swing — 10–12 reps',
           'Mountain victory pose — stand tall with arms raised in a wide V overhead, thumbs pointing behind you; hold briefly squeezing glutes and pulling shoulder blades down and together — 8–12 reps',
           'Plank rows — in plank with one hand gripping dumbbell on floor, row elbow to hip while resisting rotation; lower slowly — 8–12 reps each side',
         ],
@@ -61,6 +62,7 @@ export const SC_WORKOUTS = {
         items: [
           'Band pull-aparts — hold band at chest height with straight arms, pull apart horizontally until band touches chest squeezing shoulder blades together — 15 reps',
           'Band bilateral external rotation (light band) — elbows bent 90° and pinned to sides; rotate both forearms outward against light band resistance, pause briefly at end range — 12 reps',
+          'Lateral raises — light dumbbell in each hand; raise arms straight out to the sides to shoulder height, lower slowly; no shrugging — 10 reps',
           'Scapular push-ups — in plank with straight arms, retract then protract shoulder blades without bending elbows; serratus anterior focus — 10 reps',
           'Band standing angel (no weight) — hold band behind back with straight arms, pull apart horizontally squeezing rear delts; bodyweight version if no band available — 10 reps',
         ],
