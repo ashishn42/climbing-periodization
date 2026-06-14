@@ -304,4 +304,48 @@ export const SC_WORKOUTS = {
       },
     ],
   },
+
+  'Wrist': {
+    title: 'Wrist Health',
+    note: 'Light weight only. This is maintenance and injury prevention, not strength training. Stop if anything hurts.',
+    sections: [
+      {
+        heading: 'Do this first · 2 min',
+        items: [
+          'Wrist circles — rest your forearm on your knee, hand hanging free; make slow full circles with your wrist clockwise then anticlockwise; go to the edge of your range without pain — 10 each direction',
+        ],
+      },
+      {
+        heading: 'Main · 2–3 rounds',
+        items: [
+          'Reverse wrist curl — forearm resting on knee, palm facing down, hold light weight; lower the weight by dropping your knuckles toward the floor, then curl the back of your hand up as high as it goes; this is the side climbers almost never train — 15 reps',
+          'Wrist curl — same position, palm facing up now; lower the weight by letting it roll to your fingertips, then curl your palm up toward you — 15 reps',
+          'Hammer rotation — hold a hammer or a dumbbell by its end so the weight is offset; forearm on knee, thumb pointing up; rotate your palm all the way down then all the way up, slow and controlled — 12 each direction',
+          'Side to side tilt — same offset grip, thumb up; tilt the weight toward your thumb side (up), then toward your pinky side (down); full range, slow — 12 each direction',
+        ],
+      },
+      {
+        heading: 'Finish · 1 min',
+        items: [
+          'Finger splay with band — loop a rubber band around all five fingertips; slowly open your hand against the band as wide as you can, hold 1 second, close; balances out all the gripping from climbing — 15 reps',
+        ],
+      },
+    ],
+  },
+
+  'Neck': {
+    title: 'Neck — Easy',
+    note: 'No heavy loading. Just fixing the damage from spending hours looking up at routes. Takes 3 minutes.',
+    sections: [
+      {
+        heading: '3 minutes, no equipment',
+        items: [
+          'Chin tucks — sit or stand tall; slide your head straight back like you\'re trying to make a double chin, hold 5 seconds, release; undoes the forward head position you get from looking up at the wall all session — 10 reps',
+          'Isometric press — place your palm against your forehead and push your head forward against your hand without letting it move; hold 10 seconds; repeat on the back of your head, then each side; strengthens the neck without any range of motion — 10s each direction',
+          'Slow neck rotations — turn your head to look over one shoulder as far as comfortable, pause, come back through centre and look the other way; keep your shoulders still — 8 each side',
+          'Neck circles — drop your chin to your chest and slowly roll your head in a half circle from shoulder to shoulder; do not roll all the way back; just the front half — 5 each direction',
+        ],
+      },
+    ],
+  },
 };
