@@ -1020,17 +1020,35 @@ function BlockCard({ block, weekProg }) {
   );
 }
 
+function parseExerciseItem(item) {
+  const parts = item.split(' — ');
+  if (parts.length >= 3) {
+    return { name: parts[0], desc: parts.slice(1, -1).join(' — '), reps: parts[parts.length - 1] };
+  }
+  if (parts.length === 2) return { name: parts[0], desc: null, reps: parts[1] };
+  return { name: item, desc: null, reps: null };
+}
+
 function SCWorkoutExpanded({ workout }) {
   return (
     <div style={styles.protocolWrap}>
       <div style={styles.protocolName}>{workout.title}</div>
       {workout.note && <div style={styles.protocolNote}>{workout.note}</div>}
       {workout.sections.map((section, i) => (
-        <div key={i} style={{ marginTop: 10 }}>
+        <div key={i} style={{ marginTop: 12 }}>
           <div style={styles.scSectionHeading}>{section.heading}</div>
-          {section.items.map((item, j) => (
-            <div key={j} style={styles.scSectionItem}>· {item}</div>
-          ))}
+          {section.items.map((item, j) => {
+            const { name, desc, reps } = parseExerciseItem(item);
+            return (
+              <div key={j} style={styles.scExercise}>
+                <div style={styles.scExerciseTopRow}>
+                  <div style={styles.scExerciseName}>{name}</div>
+                  {reps && <div style={styles.scExerciseReps}>{reps}</div>}
+                </div>
+                {desc && <div style={styles.scExerciseDesc}>{desc}</div>}
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>
@@ -3410,8 +3428,12 @@ const styles = {
   backBtn: { display: 'flex', alignItems: 'center', gap: 4, background: '#1f2937', border: 'none', color: '#9ca3af', padding: '6px 10px', borderRadius: 6, fontSize: 13, fontWeight: 600, flexShrink: 0 },
 
   // S&C workout detail expand
-  scSectionHeading: { fontFamily: '"JetBrains Mono", monospace', fontSize: 10, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 },
-  scSectionItem: { fontSize: 12, color: '#d1d5db', lineHeight: 1.6, paddingLeft: 4 },
+  scSectionHeading: { fontFamily: '"JetBrains Mono", monospace', fontSize: 10, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 },
+  scExercise: { padding: '8px 0', borderBottom: '1px solid #1f2937' },
+  scExerciseTopRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 3 },
+  scExerciseName: { fontSize: 13, fontWeight: 600, color: '#f3f4f6', flex: 1 },
+  scExerciseReps: { fontFamily: '"JetBrains Mono", monospace', fontSize: 11, fontWeight: 700, color: '#10b981', background: '#064e3b', padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap', flexShrink: 0 },
+  scExerciseDesc: { fontSize: 12, color: '#6b7280', lineHeight: 1.55 },
 
   // Utils tab
   utilsTabs: { display: 'flex', gap: 8, marginBottom: 16 },
